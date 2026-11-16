@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .db import add_event, agent_to_dict, connect, create_task, create_orchestration, event_to_dict, get_orchestration_detail, init_db, orchestration_to_dict, set_runtime_value, task_to_dict, utc_now
+from .research import google_search_is_enabled
 from .workspace import WorkspaceError, list_workspace_files, read_workspace_file, search_workspace, workspace_summary
 
 
@@ -62,10 +63,11 @@ def create_app() -> FastAPI:
     async def overview() -> dict:
         with connect() as connection:
             agent_rows = connection.execute(
-                "SELECT * FROM agents ORDER BY CASE id WHEN 'ceo' THEN 0 ELSE 1 END, name"
+                "SELECT * FROM agents ORDER BY CASE id WHEN 'ceo' THEN 0 WHEN 'team_lead' THEN 1 ELSE 2 END, name"
             ).fetchall()
             task_rows = connection.execute("SELECT * FROM tasks ORDER BY created_at DESC LIMIT 100").fetchall()
             event_rows = connection.execute("SELECT * FROM events ORDER BY id DESC LIMIT 80").fetchall()
+            memory_records = connection.execute("SELECT COUNT(*) FROM agent_memory").fetchone()[0]
             runtime_rows = connection.execute("SELECT key, value, updated_at FROM runtime_state").fetchall()
             orchestration_rows = connection.execute(
                 "SELECT * FROM orchestrations ORDER BY created_at DESC LIMIT 30"
@@ -88,7 +90,7 @@ def create_app() -> FastAPI:
         agents = []
         for row in agent_rows:
             item = agent_to_dict(row)
-            if row["id"] == "ceo" and active_orchestration:
+            if row["id"] == "team_lead" and active_orchestration:
                 item["currentTask"] = active_orchestration["title"]
                 item["progress"] = round(active_orchestration_progress or 0)
                 item["status"] = "paused" if item["paused"] else (
@@ -177,6 +179,8 @@ def create_app() -> FastAPI:
                 "zero_cost_mode": True,
                 "execution_mode": "local-ollama",
                 "last_generation_metrics": last_generation_metrics,
+                "memory_records": memory_records,
+                "google_search_enabled": google_search_is_enabled(),
             },
         }
 
