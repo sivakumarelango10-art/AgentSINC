@@ -1,6 +1,6 @@
 # AgentSINC web application
 
-The Phase 2 prototype uses Next.js App Router, React 19, TypeScript, Tailwind CSS 4 and React Three Fiber v9.
+AgentSINC is an original SINC AI office. The Phase 2 visual prototype uses Next.js App Router, React 19, TypeScript, Tailwind CSS 4 and React Three Fiber v9.
 
 ## Requirements
 
@@ -25,17 +25,20 @@ npm run typecheck
 npm run build
 ```
 
-## Phase 2 prototype
+## Current Phase 2 experience
 
-This is a visual prototype with sample data. It includes:
-- Theme switching across all three supplied logo palettes.
-- A custom procedural 3D office scene built from original geometry.
-- Selectable CEO, Developer, Designer, Researcher and Tester agents.
-- A simple 2D floor-map fallback for devices without reliable WebGL support.
-- Responsive dashboard cards for active tasks and activity.
+- Full-window, immersive original SINC 3D headquarters. The office is the main workspace, not a small dashboard widget.
+- Command Hub, Development Studio, Design Studio, Research Library, Quality Lab, Collaboration Lounge and SINC identity wall.
+- Original procedural office geometry, desks, glass partitions, lighting, plants, room signage and stylized selectable AI characters.
+- Room navigation that changes the OrbitControls target.
+- Floating UI panels for agents, missions/tasks, activity, people, approvals and studio settings.
+- Three switchable brand palettes.
+- 2D floor-map mode with return-to-3D control.
 
-It is not connected to authentication, the database, the API, model providers or a background worker yet. The 2D/3D views share the same sample data, and clicking an agent updates the inspector.
+All displayed agent/task/activity details are sample data. Authentication, PostgreSQL, API, AI providers and the background worker are not connected yet.
 
-## Important
+## Local development notes
 
-The API and worker will be implemented in their own services in later phases. Do not add provider secrets to frontend environment variables. Run `npm install` to create the local lockfile before making further dependency changes.
+- Keep npm cache and temporary files outside the system drive when needed, for example with `npm config set cache E:\\npm-cache --global`.
+- The 3D environment is lazy-loaded, with a non-WebGL floor map alternative.
+- Do not add provider credentials to frontend code or browser environment variables.
