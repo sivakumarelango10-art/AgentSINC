@@ -54,8 +54,8 @@ SYSTEM_POLICY = (
 
 
 def _strip_internal_thinking(text: str) -> str:
-    cleaned = re.sub(r"<think\\b[^>]*>.*?</think\\s*>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    cleaned = re.sub(r"<think\\b[^>]*>.*$", "", cleaned, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r"<think\b[^>]*>.*?</think\s*>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r"<think\b[^>]*>.*$", "", cleaned, flags=re.IGNORECASE | re.DOTALL)
     return cleaned.strip()
 
 
