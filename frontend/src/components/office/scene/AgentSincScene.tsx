@@ -89,7 +89,7 @@ export function AgentSincScene({
       <Plant position={[10, 0, -6.8]} />
       <Plant position={[-10, 0, 7.2]} />
       <Plant position={[10, 0, 7.2]} />
-      <DisplayWall position={[0, 0, -8.15]} accent={palette.accent} />
+      <DisplayWall position={[0, 0, -9.2]} accent={palette.accent} />
 
       {agents.map((agent) => (
         <AgentAvatar
