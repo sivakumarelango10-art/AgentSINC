@@ -603,11 +603,11 @@ function AgentPanel({
           maxLength={12000}
           required
         />
-        <button className="runtime-action primary full" type="submit" disabled={!runtime.api_connected || !runtime.worker_online || !runtime.ollama_online || busyAction === "assign" || isPaused}>
+        <button className="runtime-action primary full" type="submit" disabled={!runtime.api_connected || busyAction === "assign" || isPaused}>
           {busyAction === "assign" ? "Adding to queue…" : "Assign mission to agent"}
         </button>
         {!runtime.api_connected ? <small className="form-hint">Start the local API to enable assignment.</small> : null}
-        {runtime.api_connected && (!runtime.worker_online || !runtime.ollama_online) ? <small className="form-hint">API connected. Start Ollama and the worker to process missions.</small> : null}
+        {runtime.api_connected && (!runtime.worker_online || !runtime.ollama_online) ? <small className="form-hint">Mission can queue now; start Ollama and the worker to process it.</small> : null}
         <small className="form-hint">The local model returns analysis and text deliverables. It cannot edit files or use external tools yet.</small>
       </form>
 
