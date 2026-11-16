@@ -295,11 +295,13 @@ function AgentAvatar({
         <sphereGeometry args={[0.22, 18, 18]} />
         <meshStandardMaterial color="#E8D6C5" roughness={0.8} />
       </mesh>
-      <mesh castShadow position={[-0.31, 0.94, 0]}>
-        <capsuleFallback color={agent.color} />
+      <mesh castShadow position={[-0.31, 0.94, 0]} rotation={[0, 0, 0.16]}>
+        <cylinderGeometry args={[0.075, 0.09, 0.52, 8]} />
+        <meshStandardMaterial color={agent.color} roughness={0.5} />
       </mesh>
-      <mesh castShadow position={[0.31, 0.94, 0]}>
-        <capsuleFallback color={agent.color} />
+      <mesh castShadow position={[0.31, 0.94, 0]} rotation={[0, 0, -0.16]}>
+        <cylinderGeometry args={[0.075, 0.09, 0.52, 8]} />
+        <meshStandardMaterial color={agent.color} roughness={0.5} />
       </mesh>
       <mesh castShadow position={[-0.13, 0.36, 0]}>
         <boxGeometry args={[0.12, 0.42, 0.16]} />
@@ -319,11 +321,3 @@ function AgentAvatar({
   );
 }
 
-function capsuleFallback({ color }: { color: string }) {
-  return (
-    <>
-      <boxGeometry args={[0.13, 0.5, 0.13]} />
-      <meshStandardMaterial color={color} roughness={0.5} />
-    </>
-  );
-}
