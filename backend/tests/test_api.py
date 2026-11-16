@@ -9,6 +9,7 @@ os.environ["AGENTSINC_DB_PATH"] = str(Path("tests") / f"test-{uuid4().hex}.sqlit
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
+from app.db import set_runtime_value  # noqa: E402
 
 
 client = TestClient(app)
@@ -164,3 +165,19 @@ def test_queued_ceo_orchestration_can_be_cancelled() -> None:
 def test_unknown_ceo_orchestration_returns_not_found() -> None:
     response = client.get("/api/v1/orchestrations/not-a-real-id")
     assert response.status_code == 404
+
+
+
+def test_overview_exposes_latest_local_generation_metrics() -> None:
+    set_runtime_value(
+        "last_generation_metrics",
+        '{"model":"qwen3:4b","agent_id":"developer","task_id":"test-task",'
+        '"elapsed_seconds":4.2,"prompt_tokens":900,"generated_tokens":160,'
+        '"tokens_per_second":40.0,"load_seconds":0.3,"measured_at":"2026-11-16T00:00:00+00:00"}',
+    )
+    response = client.get("/api/v1/overview")
+    assert response.status_code == 200
+    metrics = response.json()["runtime"]["last_generation_metrics"]
+    assert metrics["model"] == "qwen3:4b"
+    assert metrics["tokens_per_second"] == 40.0
+    assert metrics["generated_tokens"] == 160

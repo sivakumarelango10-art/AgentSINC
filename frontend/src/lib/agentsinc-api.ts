@@ -48,6 +48,18 @@ export type AgentEvent = {
   created_at: string;
 };
 
+export type GenerationMetrics = {
+  model: string;
+  agent_id: string;
+  task_id: string;
+  elapsed_seconds: number;
+  prompt_tokens: number;
+  generated_tokens: number;
+  tokens_per_second: number | null;
+  load_seconds: number;
+  measured_at: string;
+};
+
 export type RuntimeStatus = {
   api_connected: boolean;
   worker_online: boolean;
@@ -58,6 +70,7 @@ export type RuntimeStatus = {
   selected_model: string | null;
   zero_cost_mode: boolean;
   execution_mode: string;
+  last_generation_metrics?: GenerationMetrics;
 };
 
 export type WorkspaceSummary = {

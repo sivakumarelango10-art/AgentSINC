@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
 from typing import Literal
@@ -143,6 +144,14 @@ def create_app() -> FastAPI:
         except (httpx.HTTPError, ValueError):
             ollama_online = False
 
+        last_generation_metrics: dict[str, Any] = {}
+        try:
+            parsed_metrics = json.loads(state.get("last_generation_metrics", {}).get("value") or "{}")
+            if isinstance(parsed_metrics, dict):
+                last_generation_metrics = parsed_metrics
+        except (TypeError, ValueError):
+            last_generation_metrics = {}
+
         selected_model = state.get("selected_model", {}).get("value") or os.getenv("AGENTSINC_OLLAMA_MODEL")
         if selected_model and selected_model not in models:
             selected_model = None
@@ -167,6 +176,7 @@ def create_app() -> FastAPI:
                 "selected_model": selected_model,
                 "zero_cost_mode": True,
                 "execution_mode": "local-ollama",
+                "last_generation_metrics": last_generation_metrics,
             },
         }
 

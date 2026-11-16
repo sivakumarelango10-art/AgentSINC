@@ -60,6 +60,32 @@ After creating the virtual environment and installing the requirements, run from
 
 It opens separate API and worker PowerShell windows. Keep both open while the local runtime is in use.
 
+## Local Ollama performance defaults
+
+The default local tuning targets a laptop GPU with 4 GB VRAM and Ollama's 4K context:
+
+- Workspace source snapshot: 9,000 characters by default (bounded configurable range: 6,000–14,000).
+- Ollama context: 4,096 tokens by default (configurable range: 2,048–8,192).
+- Specialist output: maximum 650 tokens.
+- CEO plan: maximum 850 tokens.
+- CEO synthesis: maximum 900 tokens.
+- Qwen 3 thinking mode is disabled for routine specialist and orchestration calls.
+- Model keep-alive: 20 minutes to reduce reloads between sequential stages.
+- One worker remains the default; do not enable parallel inference on a 4 GB VRAM GPU without measuring memory and latency.
+
+Optional environment overrides:
+
+    $env:AGENTSINC_CONTEXT_MAX_CHARS = "9000"
+    $env:AGENTSINC_OLLAMA_CONTEXT_TOKENS = "4096"
+    $env:AGENTSINC_SPECIALIST_MAX_TOKENS = "650"
+    $env:AGENTSINC_CEO_PLAN_MAX_TOKENS = "850"
+    $env:AGENTSINC_CEO_SYNTHESIS_MAX_TOKENS = "900"
+    $env:AGENTSINC_OLLAMA_KEEP_ALIVE = "20m"
+
+The latest completed specialist response records prompt tokens, generated tokens, model load time, elapsed time and measured generation tokens/second in the runtime overview. The Studio settings panel displays these metrics. Compare several missions before deciding whether to change model, context or output budgets.
+
+These are conservative starting values, not a guaranteed speed increase. Shorter context and output limits trade report length for latency; review the deliverables for quality before reducing further.
+
 ## Read-only project workspace
 
 The worker automatically treats the repository root as its workspace (the directory containing `backend/` and `frontend/`). Override it only when needed:

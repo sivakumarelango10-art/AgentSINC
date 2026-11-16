@@ -10,7 +10,16 @@ MAX_INDEX_FILES = 1600
 MAX_FILE_BYTES = 128_000
 MAX_SCAN_BYTES = 24_000_000
 MAX_SEARCH_BYTES_PER_FILE = 16_000
-MAX_CONTEXT_CHARS = 22_000
+def _bounded_setting(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+# Keep source context small enough for local models running a 4K token window.
+MAX_CONTEXT_CHARS = _bounded_setting("AGENTSINC_CONTEXT_MAX_CHARS", 9_000, 6_000, 14_000)
 ALLOWED_SUFFIXES = {
     ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
     ".json", ".md", ".mdx", ".yml", ".yaml", ".toml", ".ini",
