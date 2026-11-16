@@ -10,6 +10,7 @@ import httpx
 
 from .db import add_event, connect, get_runtime_value, set_runtime_value, utc_now
 from .workspace import WorkspaceError, build_workspace_context
+from .orchestrator import process_next_orchestration, recover_orchestrations, task_cancelled
 
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
@@ -97,9 +98,7 @@ def _claim_next_task() -> dict[str, Any] | None:
 
 
 def _cancel_requested(task_id: str) -> bool:
-    with connect() as connection:
-        row = connection.execute("SELECT cancel_requested FROM tasks WHERE id=?", (task_id,)).fetchone()
-    return bool(row and row["cancel_requested"])
+    return task_cancelled(task_id)
 
 
 def _record_progress(task: dict[str, Any], progress: int, note: str | None = None) -> None:
@@ -307,6 +306,7 @@ def _recover_interrupted_missions() -> None:
                 "Worker restarted; the unfinished mission was safely returned to the queue.",
             )
         connection.commit()
+    recover_orchestrations()
 
 
 async def _keep_heartbeat_fresh() -> None:
@@ -340,6 +340,9 @@ async def run_worker() -> None:
                 if not model:
                     await asyncio.sleep(5)
                     continue
+                if await process_next_orchestration(client, OLLAMA_BASE_URL, MODEL_TIMEOUT, model):
+                    continue
+
                 task = _claim_next_task()
                 if not task:
                     await asyncio.sleep(poll)
