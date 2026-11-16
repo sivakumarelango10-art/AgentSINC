@@ -25,16 +25,16 @@ export default function OfficeViewport({
   return (
     <Canvas
       shadows
-      dpr={[1, 1.65]}
-      camera={{ position: [15.5, 15, 18], fov: 38, near: 0.1, far: 120 }}
+      dpr={[1, 1.5]}
+      camera={{ position: [16, 14.5, 18.5], fov: 39, near: 0.1, far: 140 }}
       gl={{
         antialias: true,
         alpha: false,
         powerPreference: "high-performance",
       }}
       onCreated={({ gl }) => {
-        gl.setClearColor("#070B14", 1);
-        gl.toneMappingExposure = 1.05;
+        gl.setClearColor("#EAF0F6", 1);
+        gl.toneMappingExposure = 1.18;
       }}
     >
       <Suspense fallback={null}>
