@@ -3,7 +3,10 @@ export type AgentStatus =
   | "thinking"
   | "collaborating"
   | "idle"
-  | "waiting";
+  | "waiting"
+  | "queued"
+  | "paused"
+  | "failed";
 
 export type BrandTheme = "cyber" | "ember" | "indigo";
 
@@ -53,9 +56,9 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     name: "SINC CEO",
     role: "Chief Orchestrator",
     department: "Command Hub",
-    status: "working",
-    currentTask: "Coordinating the company roadmap",
-    progress: 72,
+    status: "idle",
+    currentTask: "No active mission assigned",
+    progress: 0,
     color: "#7C3AED",
     model: "Orchestrator",
     position: [0, 0, -4.5],
@@ -65,9 +68,9 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     name: "Dev Agent",
     role: "Developer",
     department: "Development Studio",
-    status: "working",
-    currentTask: "Building the AgentSINC foundation",
-    progress: 64,
+    status: "idle",
+    currentTask: "No active mission assigned",
+    progress: 0,
     color: "#0EA5E9",
     model: "Code Specialist",
     position: [-6.3, 0, -0.9],
@@ -77,9 +80,9 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     name: "Design Agent",
     role: "Designer",
     department: "Design Studio",
-    status: "collaborating",
-    currentTask: "Exploring the SINC visual system",
-    progress: 48,
+    status: "idle",
+    currentTask: "No active mission assigned",
+    progress: 0,
     color: "#EC4899",
     model: "Visual Specialist",
     position: [6.3, 0, -0.9],
@@ -89,9 +92,9 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     name: "Research Agent",
     role: "Researcher",
     department: "Research Library",
-    status: "thinking",
-    currentTask: "Reviewing architecture options",
-    progress: 35,
+    status: "idle",
+    currentTask: "No active mission assigned",
+    progress: 0,
     color: "#D97706",
     model: "Research Specialist",
     position: [-6.3, 0, 4.25],
@@ -102,7 +105,7 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     role: "Tester",
     department: "Quality Lab",
     status: "idle",
-    currentTask: "Waiting for the next build",
+    currentTask: "No active mission assigned",
     progress: 0,
     color: "#16A34A",
     model: "Quality Specialist",
@@ -116,4 +119,7 @@ export const STATUS_LABELS: Record<AgentStatus, string> = {
   collaborating: "Collaborating",
   idle: "Idle",
   waiting: "Awaiting approval",
+  queued: "Mission queued",
+  paused: "Paused",
+  failed: "Last mission failed",
 };
