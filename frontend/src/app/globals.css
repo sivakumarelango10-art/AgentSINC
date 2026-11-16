@@ -292,3 +292,160 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+
+/* AgentSINC white-first architectural studio direction */
+:root {
+  color-scheme: light;
+  --world-bg: #EEF2F6;
+  --glass: rgba(255,255,255,.84);
+  --glass-strong: rgba(255,255,255,.96);
+  --glass-border: rgba(93,110,132,.19);
+  --text: #1D2939;
+  --muted: #64748B;
+  --subtle: #8290A3;
+  --accent-glow: color-mix(in srgb, var(--accent), transparent 88%);
+  --success: #159A62;
+}
+html, body { background: #EEF2F6; color: #1D2939; }
+.sinc-world { background: #EEF2F6; }
+.world-backdrop {
+  background:
+    radial-gradient(ellipse at 49% 39%, rgba(255,255,255,.94) 0%, rgba(240,245,250,.92) 47%, #E5EBF2 100%),
+    #EEF2F6;
+}
+.world-vignette {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.66) 0%, rgba(255,255,255,.04) 20%, rgba(255,255,255,.02) 70%, rgba(227,234,242,.5) 100%),
+    linear-gradient(90deg, rgba(237,242,247,.48), transparent 24%, transparent 76%, rgba(237,242,247,.38));
+}
+.world-topbar, .world-rail, .world-panel, .panel-reopen {
+  color: #243246;
+  border-color: rgba(104,120,141,.2);
+  background: rgba(255,255,255,.83);
+  box-shadow: 0 16px 46px rgba(45,61,81,.12);
+  backdrop-filter: blur(22px) saturate(1.3);
+}
+.world-brand-mark { border-color: rgba(87,103,125,.18); background: #FFFFFF; box-shadow: 0 4px 14px rgba(49,65,88,.08); }
+.world-brand-type strong, .world-brand-type strong span { color: #172337; }
+.world-brand-type strong span { color: var(--accent); }
+.world-brand-type small { color: #7A8798; }
+.world-location { color: #596A80; border-color: rgba(100,116,139,.18); background: rgba(248,250,252,.9); }
+.world-location strong { color: #334155; }
+.world-location i, .rail-divider, .world-bottom-left i { background: rgba(71,85,105,.2); }
+.runtime-indicator { color: #506176; }
+.theme-cycle { color: #405168; border-color: rgba(100,116,139,.2); background: #FFFFFF; box-shadow: 0 3px 12px rgba(43,58,77,.06); }
+.theme-cycle:hover { background: color-mix(in srgb, var(--accent), white 92%); }
+.founder-avatar { border-color: #FFFFFF; box-shadow: 0 2px 8px rgba(43,58,77,.18); }
+.world-rail { background: rgba(255,255,255,.88); }
+.rail-top-glyph { color: #FFFFFF; }
+.rail-action { color: #65758B; }
+.rail-action:hover, .rail-action.active { color: var(--accent); background: color-mix(in srgb, var(--accent), transparent 91%); border-color: color-mix(in srgb, var(--accent), transparent 76%); }
+.rail-action small { color: #66768C; }
+.rail-foot-label { color: #8A97A8; }
+.world-eyebrow { color: #65758B; }
+.world-intro h1 { color: #1D2939; text-shadow: 0 2px 18px rgba(255,255,255,.8); }
+.world-intro h1 em { color: var(--accent); }
+.world-intro-copy { color: #617188; }
+.world-intro-stats strong { color: #243246; }
+.world-intro-stats span { color: #718096; }
+.world-intro-stats > i { background: rgba(71,85,105,.25); }
+.dock-label { color: #64748B; }
+.room-chip { color: #475569; border-color: rgba(100,116,139,.18); background: rgba(255,255,255,.88); box-shadow: 0 7px 18px rgba(42,56,76,.08); }
+.room-chip small { color: #4B5B70; }
+.room-chip:hover, .room-chip.selected { background: #FFFFFF; box-shadow: 0 5px 18px color-mix(in srgb, var(--room-tint), transparent 83%); }
+.room-chip.selected small { color: #172337; }
+.world-panel-head { border-bottom-color: rgba(100,116,139,.15); background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(247,249,252,.75)); }
+.world-panel-head h2 { color: #1E293B; }
+.world-panel-subtitle { color: #66768C; }
+.panel-close { color: #58677B; border-color: rgba(100,116,139,.2); background: #F8FAFC; }
+.panel-close:hover { color: #172337; background: #EDF2F7; }
+.panel-content { scrollbar-color: rgba(100,116,139,.25) transparent; }
+.agent-feature-copy h3 { color: #1D2939; }
+.agent-feature-copy p { color: #64748B; }
+.agent-feature-emblem { background: color-mix(in srgb, var(--agent-color), white 91%); }
+.agent-detail-grid { border-color: rgba(100,116,139,.15); }
+.agent-detail-grid small, .mission-section-heading span, .panel-section-label { color: #718096; }
+.agent-detail-grid strong { color: #344256; }
+.agent-current-mission { border-color: rgba(100,116,139,.15); }
+.agent-current-mission p { color: #344256; }
+.mission-section-heading b, .mission-progress-copy strong { color: #27364B; }
+.mission-progress { background: #E2E8F0; }
+.panel-section-label span { color: #94A3B8; }
+.specialist-row:hover, .specialist-row.selected { border-color: rgba(100,116,139,.15); background: #F2F5F9; }
+.specialist-copy strong { color: #27364B; }
+.specialist-copy small { color: #748197; }
+.panel-note { border-color: rgba(100,116,139,.13); color: #66768B; background: #F6F8FB; }
+.mission-card { border-color: rgba(100,116,139,.16); background: #FFFFFF; box-shadow: 0 4px 15px rgba(40,55,75,.045); }
+.mission-topline { color: #738197; }
+.mission-card h3 { color: #25354A; }
+.mission-card p { color: #77869A; }
+.mission-progress-copy { color: #738197; }
+.signal-item { border-color: rgba(100,116,139,.14); }
+.signal-item small { color: #78879B; }
+.signal-item p { color: #344256; }
+.team-person { border-color: rgba(100,116,139,.12); background: #FFFFFF; }
+.team-person strong { color: #26364B; }
+.team-person small { color: #718096; }
+.panel-empty strong { color: #26364B; }
+.panel-empty p { color: #718096; }
+.setting-block > span { color: #718096; }
+.setting-block > strong { color: #26364B; }
+.setting-block > small { color: #718096; }
+.palette-choice { color: #475569; border-color: rgba(100,116,139,.15); background: #FFFFFF; }
+.palette-choice.selected { color: #1D2939; background: color-mix(in srgb, var(--accent), white 92%); }
+.panel-reopen { color: #344256; }
+.world-bottom-left, .world-footer { color: #68788D; }
+.footer-brand { color: #344256; }
+.footer-shortcuts kbd { color: #4B5B70; border-color: rgba(100,116,139,.2); background: rgba(255,255,255,.78); }
+.footer-version { color: #8A97A8; }
+
+.scene-zone-label {
+  color: #29384D;
+  border-color: color-mix(in srgb, var(--zone-color), white 42%);
+  background: rgba(255,255,255,.94);
+  box-shadow: 0 5px 18px rgba(44,59,80,.13);
+}
+.scene-center-label, .scene-room-sign {
+  color: #25364B;
+  border-color: rgba(100,116,139,.2);
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 4px 16px rgba(45,61,81,.1);
+}
+.scene-reception-label {
+  color: #26364B;
+  border-color: rgba(139,92,246,.34);
+  background: rgba(255,255,255,.97);
+  box-shadow: 0 6px 20px rgba(40,56,78,.13);
+}
+.scene-display-brand {
+  color: #1E293B;
+  border-color: rgba(100,116,139,.18);
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 4px 17px rgba(40,56,78,.09);
+}
+.scene-display-brand strong { color: #1E293B; }
+.scene-display-brand small { color: #64748B; }
+.scene-agent-tag {
+  border-color: color-mix(in srgb, var(--agent-color), white 52%);
+  background: rgba(255,255,255,.97);
+  box-shadow: 0 5px 18px rgba(40,56,78,.13);
+}
+.scene-agent-tag span { color: #25364B; }
+.scene-agent-tag.selected { background: #FFFFFF; }
+
+.office-map { background: radial-gradient(ellipse at center, #FFFFFF, #E7EDF4 76%); }
+.office-map::before { background-image: linear-gradient(rgba(100,116,139,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(100,116,139,.09) 1px, transparent 1px); }
+.map-orbit { border-color: rgba(38,118,232,.16); }
+.map-orbit-two { border-color: rgba(139,92,246,.16); }
+.map-core { color: #26364B; background: rgba(255,255,255,.95); box-shadow: 0 10px 32px rgba(50,67,90,.12); }
+.map-node { color: #344256; border-color: color-mix(in srgb,var(--agent-color),white 48%); background: rgba(255,255,255,.96); box-shadow: 0 12px 34px rgba(45,61,81,.12); }
+.map-node.selected { background: #FFFFFF; }
+.map-node strong { color: #26364B; }
+.map-node small { color: var(--agent-color); }
+.map-caption { color: #6D7C91; }
+.map-return-3d { color: var(--accent); border-color: color-mix(in srgb,var(--accent),white 45%); background: rgba(255,255,255,.92); }
+
+@media (max-width: 800px) {
+  .world-panel { background: rgba(255,255,255,.96); }
+}
