@@ -15,10 +15,12 @@ import {
   controlAgent,
   createMission,
   getOverview,
+  getWorkspaceSummary,
   retryMission,
   type AgentEvent,
   type AgentTask,
   type RuntimeStatus,
+  type WorkspaceSummary,
 } from "@/lib/agentsinc-api";
 
 const OfficeViewport = dynamic(() => import("./OfficeViewport"), {
@@ -744,8 +746,47 @@ function SettingsPanel({
   onRefresh: () => void;
   notice: string;
 }) {
+  const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(true);
+  const [workspaceError, setWorkspaceError] = useState("");
+
+  useEffect(() => {
+    let disposed = false;
+    getWorkspaceSummary()
+      .then((summary) => {
+        if (!disposed) {
+          setWorkspace(summary);
+          setWorkspaceError("");
+        }
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setWorkspaceError(error instanceof Error ? error.message : "Workspace inspection is unavailable.");
+        }
+      })
+      .finally(() => {
+        if (!disposed) setWorkspaceLoading(false);
+      });
+    return () => { disposed = true; };
+  }, []);
+
   return (
     <div className="panel-content settings-list">
+
+      <div className="runtime-health-card">
+        <div className="runtime-health-head">
+          <strong>PROJECT WORKSPACE</strong>
+          <span className={workspace?.available ? "health-chip ready" : "health-chip"}>{workspaceLoading ? "CHECKING" : workspace?.available ? "READ ONLY" : "UNAVAILABLE"}</span>
+        </div>
+        {workspaceLoading ? <small>Inspecting the configured local project…</small> : null}
+        {workspace ? (
+          <>
+            <div className="health-row"><i className="health-dot online" /><span>{workspace.root_name}</span><small>{workspace.file_count.toLocaleString()} text files</small></div>
+            <small>Path-confined source access · dependency and secret folders excluded</small>
+          </>
+        ) : null}
+        {workspaceError ? <small>{workspaceError}</small> : null}
+      </div>
       <div className="runtime-health-card">
         <div className="runtime-health-head">
           <strong>LOCAL RUNTIME HEALTH</strong>
