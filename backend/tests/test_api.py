@@ -96,3 +96,27 @@ def test_missing_agent_returns_not_found() -> None:
         },
     )
     assert response.status_code == 404
+
+
+def test_workspace_summary_is_available_and_read_only() -> None:
+    response = client.get("/api/v1/workspace/summary")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["available"] is True
+    assert payload["read_only"] is True
+    assert payload["sensitive_files_excluded"] is True
+
+
+def test_workspace_api_blocks_parent_directory_traversal() -> None:
+    response = client.get("/api/v1/workspace/read", params={"path": "../outside.txt"})
+    assert response.status_code == 400
+
+
+def test_workspace_api_can_search_real_repository_files() -> None:
+    response = client.get(
+        "/api/v1/workspace/search",
+        params={"q": "Ollama local worker", "limit": 5},
+    )
+    assert response.status_code == 200
+    paths = [item["path"] for item in response.json()["results"]]
+    assert "backend/app/worker.py" in paths
