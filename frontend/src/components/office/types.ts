@@ -55,7 +55,7 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
   {
     id: "ceo",
     name: "SINC CEO",
-    role: "Chief Orchestrator",
+    role: "Founder Interface",
     department: "Command Hub",
     status: "idle",
     currentTask: "No active mission assigned",
@@ -63,6 +63,18 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     color: "#7C3AED",
     model: "Orchestrator",
     position: [0, 0, -4.5],
+  },
+  {
+    id: "team_lead",
+    name: "Team Lead",
+    role: "Execution Coordinator",
+    department: "Command Hub",
+    status: "idle",
+    currentTask: "Waiting for the next founder request",
+    progress: 0,
+    color: "#0F9D91",
+    model: "Mission Coordinator",
+    position: [2.05, 0, -5.15],
   },
   {
     id: "developer",
