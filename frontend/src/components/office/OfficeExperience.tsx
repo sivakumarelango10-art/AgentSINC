@@ -1016,11 +1016,12 @@ function OfficeMap2D({
   onReturnTo3D: () => void;
 }) {
   const positions = [
-    { id: "command", x: "50%", y: "22%", label: "COMMAND HUB" },
-    { id: "development", x: "23%", y: "43%", label: "DEVELOPMENT" },
-    { id: "design", x: "77%", y: "43%", label: "DESIGN STUDIO" },
-    { id: "research", x: "23%", y: "78%", label: "RESEARCH" },
-    { id: "quality", x: "77%", y: "78%", label: "QUALITY LAB" },
+    { agentId: "ceo", id: "command", x: "43%", y: "22%", label: "SINC CEO" },
+    { agentId: "team_lead", id: "command", x: "60%", y: "22%", label: "TEAM LEAD" },
+    { agentId: "developer", id: "development", x: "22%", y: "43%", label: "DEVELOPMENT" },
+    { agentId: "designer", id: "design", x: "78%", y: "43%", label: "DESIGN STUDIO" },
+    { agentId: "researcher", id: "research", x: "22%", y: "78%", label: "RESEARCH" },
+    { agentId: "tester", id: "quality", x: "78%", y: "78%", label: "QUALITY LAB" },
   ];
 
   return (
@@ -1028,8 +1029,9 @@ function OfficeMap2D({
       <div className="map-orbit map-orbit-one" />
       <div className="map-orbit map-orbit-two" />
       <div className="map-core">SINC<br /><small>OPERATIONS</small></div>
-      {positions.map((position, index) => {
-        const agent = agents[index];
+      {positions.map((position) => {
+        const agent = agents.find((item) => item.id === position.agentId);
+        if (!agent) return null;
         return (
           <button
             key={agent.id}
