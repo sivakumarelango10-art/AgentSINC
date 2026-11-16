@@ -37,7 +37,7 @@ STOP_WORDS = {
 
 
 SECRET_ASSIGNMENT = re.compile(
-    r"""(?im)^([ \t]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|passwd|authorization)[ \t]*[:=][ \t]*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s#]+)"""
+    r"""(?im)^([ \t]*(?:(?:export|const|let|var)\s+)*(?:(?:[A-Z0-9_]+_)?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|secret|password|passwd|authorization))[ \t]*[:=][ \t]*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s#]+)"""
 )
 JSON_SECRET_ASSIGNMENT = re.compile(
     r"""(?i)(["'](?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|authorization)["'][ \t]*:[ \t]*)(["'])[^"']*\2"""
@@ -180,7 +180,7 @@ def iter_workspace_files(max_files: int = MAX_INDEX_FILES) -> Iterable[tuple[str
 
 
 def list_workspace_files(limit: int = 200) -> list[str]:
-    bounded = max(1, min(limit, 500))
+    bounded = max(1, min(limit, MAX_INDEX_FILES))
     return [relative for relative, _ in iter_workspace_files(max_files=bounded)]
 
 
