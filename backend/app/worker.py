@@ -367,11 +367,17 @@ async def run_worker() -> None:
                 except MissionCancelled:
                     _cancel_task(task, "Mission cancelled by the founder.")
                 except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-                    _fail_task(task, f"Local model error: {exc}")
-                    print(f'Mission failed: {task["id"]}: {exc}', flush=True)
+                    if _cancel_requested(task["id"]):
+                        _cancel_task(task, "Mission cancelled by the founder.")
+                    else:
+                        _fail_task(task, f"Local model error: {exc}")
+                        print(f'Mission failed: {task["id"]}: {exc}', flush=True)
                 except Exception as exc:
-                    _fail_task(task, f"Unexpected worker error: {type(exc).__name__}: {exc}")
-                    print(f'Unexpected mission error: {exc}', flush=True)
+                    if _cancel_requested(task["id"]):
+                        _cancel_task(task, "Mission cancelled by the founder.")
+                    else:
+                        _fail_task(task, f"Unexpected worker error: {type(exc).__name__}: {exc}")
+                        print(f'Unexpected mission error: {exc}', flush=True)
     finally:
         heartbeat_task.cancel()
         try:
