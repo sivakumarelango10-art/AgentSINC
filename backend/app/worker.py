@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -215,6 +216,42 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
     return result
 
 
+def _acquire_worker_lease() -> bool:
+    now = utc_now()
+    with connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        state = {
+            row["key"]: row["value"]
+            for row in connection.execute(
+                "SELECT key, value FROM runtime_state WHERE key IN ('worker_state', 'worker_heartbeat')"
+            ).fetchall()
+        }
+        heartbeat = state.get("worker_heartbeat")
+        if state.get("worker_state") == "running" and heartbeat:
+            try:
+                parsed = datetime.fromisoformat(heartbeat)
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                fresh = (datetime.now(timezone.utc) - parsed).total_seconds() < 12
+                if fresh:
+                    connection.rollback()
+                    return False
+            except ValueError:
+                pass
+        connection.execute(
+            """INSERT INTO runtime_state (key, value, updated_at) VALUES ('worker_state', 'running', ?)
+            ON CONFLICT(key) DO UPDATE SET value='running', updated_at=excluded.updated_at""",
+            (now,),
+        )
+        connection.execute(
+            """INSERT INTO runtime_state (key, value, updated_at) VALUES ('worker_heartbeat', ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at""",
+            (now, now),
+        )
+        connection.commit()
+        return True
+
+
 def _recover_interrupted_missions() -> None:
     now = utc_now()
     with connect() as connection:
@@ -315,6 +352,9 @@ def main() -> None:
             set_runtime_value("worker_heartbeat", utc_now())
             print("AgentSINC local worker stopped.", flush=True)
 
+    if not _acquire_worker_lease():
+        print("Another AgentSINC worker already has a fresh heartbeat. Exiting to avoid duplicate processing.", flush=True)
+        return
     asyncio.run(serve())
 
 
