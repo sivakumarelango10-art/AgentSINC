@@ -76,3 +76,13 @@ def test_specialist_request_uses_local_performance_limits_and_records_metrics(tm
     assert metrics["generated_tokens"] == 80
     assert metrics["tokens_per_second"] == 40.0
     assert metrics["load_seconds"] == 0.5
+
+
+
+def test_specialist_output_removes_internal_thinking_tags() -> None:
+    cleaned = worker._strip_internal_thinking(
+        "Evidence summary.\\n<think>private chain of thought</think>\\nFinal recommendation."
+    )
+    assert "private chain of thought" not in cleaned
+    assert "Evidence summary." in cleaned
+    assert "Final recommendation." in cleaned

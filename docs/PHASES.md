@@ -211,3 +211,21 @@ Acceptance:
 - Frontend typecheck and production build pass.
 - Run the same representative mission before and after on the founder's laptop and compare first-token latency, tokens/second, total elapsed time and report quality.
 - Keep the previous profile available for rollback if concise outputs omit important evidence.
+
+
+## Phase 4B.2 — Preserve explicit founder assignments and report only real evidence
+
+A live founder-requested production-readiness audit exposed a task-planning quality defect: Qwen generated generic "new feature" tasks instead of preserving the four explicitly requested specialist responsibilities. The Researcher was omitted, the Designer was assigned unavailable Figma work, and the CEO final response included internal-looking reasoning text and unsupported claims.
+
+Corrections on the Phase 4B.2 branch:
+- Recognize explicit numbered/bold specialist headings for Developer, Designer, Research/Researcher and QA/Tester.
+- When explicit role sections are present, derive the child missions from the founder's own text and skip model-based role re-selection.
+- Preserve each specialist's responsibility text and enforce the analysis/read-only capability boundary.
+- Strengthen the generic planner prompt so audits remain audits and unsupported Figma, browser, shell and file-editing tasks are not invented.
+- Strengthen specialist prompts to follow the exact assigned mission, cite source paths and label unsupported findings.
+- Include explicit requested, returned and incomplete specialist IDs in CEO synthesis context.
+- Remove tagged `<think>` blocks from specialist and CEO output and instruct models to return only deliverables.
+
+Regression tests cover the exact four-role production-readiness prompt, atomic creation of all four requested specialist tasks without an Ollama planning call, and suppression of tagged internal-thinking output.
+
+The earlier live orchestration `794ff0da-a636-4c20-955f-cd0bf312b9cf` remains a completed but invalid audit: its three specialists were assigned generic new-feature missions. It is not retroactively repaired; a fresh audit is required after this fix is merged and pulled.

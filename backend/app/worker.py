@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -44,8 +45,18 @@ SYSTEM_POLICY = (
     "or external-action tools. Do not claim to have edited files, run tests, searched the web, deployed "
     "software, or performed any side effect. When the supplied snapshot does not contain enough evidence, "
     "say exactly what is missing. Produce useful analysis, plans, code proposals and test checklists. "
-    "Clearly separate verified facts from assumptions and recommendations."
+    "Clearly separate verified facts from assumptions and recommendations. "
+    "Follow the exact assigned mission; never turn an audit or review into implementation work. "
+    "Do not mention or promise Figma, browser automation or other unavailable tools. "
+    "Do not expose private reasoning, internal planning, hidden thoughts or <think> blocks. "
+    "Return only the requested deliverable."
 )
+
+
+def _strip_internal_thinking(text: str) -> str:
+    cleaned = re.sub(r"<think\b[^>]*>.*?</think\s*>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r"<think\b[^>]*>.*$", "", cleaned, flags=re.IGNORECASE | re.DOTALL)
+    return cleaned.strip()
 
 
 def _heartbeat(state: str = "running") -> None:
@@ -215,7 +226,11 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
         "For architecture/codebase questions, base your findings on these actual files. Cite relative "
         "file paths inline. State when a file was not supplied or when evidence is insufficient. "
         "Do not suggest that you executed commands or changed files.\n\n"
-        "Be concise and evidence-led. Target a short report with a summary, key findings, risks and next actions. "
+        "Follow the mission title and founder-assigned responsibility exactly. If this is an audit or review, "
+        "do not implement a new feature, design a new product, or claim to use Figma or any unavailable tool. "
+        "Base every factual finding on supplied source files; if evidence is absent, label it unverified. "
+        "Do not include internal reasoning, self-dialogue, hidden thoughts, or <think> sections. "
+        "Return only a concise deliverable with summary, evidence-backed findings, risks and next actions. "
         "Prioritize the strongest evidence instead of repeating the full source context."
     )
     payload = {
@@ -270,7 +285,7 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
                 last_progress_event = progress
     if _cancel_requested(task["id"]):
         raise MissionCancelled("Founder requested cancellation.")
-    result = "".join(chunks).strip()
+    result = _strip_internal_thinking("".join(chunks))
     if not result:
         raise RuntimeError("Ollama returned an empty response.")
 

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+from uuid import uuid4
 
 import httpx
 
 from app.db import connect, create_orchestration, get_orchestration_detail, init_db
-from app.orchestrator import CEO_PLAN_SCHEMA, _claim_planning, _claim_synthesis, _plan, _synthesize, _validate_plan
+from app import orchestrator
+from app.orchestrator import CEO_PLAN_SCHEMA, _claim_planning, _claim_synthesis, _explicit_specialist_plan, _plan, _strip_internal_thinking, _synthesize, _validate_plan
 
 
 def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypatch) -> None:
@@ -146,3 +148,141 @@ def test_ceo_plan_still_rejects_empty_or_invalid_delegations() -> None:
         assert "specialist missions" in str(exc)
     else:
         raise AssertionError("An empty specialist plan must be rejected.")
+
+
+
+def test_explicit_founder_specialist_sections_are_preserved_without_llm_replanning(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENTSINC_DB_PATH", str(tmp_path / "explicit-specialists.sqlite3"))
+    init_db()
+    instructions = """Coordinate all four specialist agents for a production-readiness audit.
+
+1. **DEVELOPER AGENT**
+Review backend architecture, FastAPI endpoints, SQLite persistence, Ollama worker and task lifecycle.
+
+2. **DESIGNER AGENT**
+Review the Next.js frontend, 3D office, agent interactions and responsive user experience.
+
+3. **RESEARCH AGENT**
+Review project documentation, architecture decisions, dependencies and production requirements.
+
+4. **QA AGENT**
+Review automated tests, error handling, runtime reliability, security boundaries and missing test coverage.
+"""
+    request = create_orchestration("AgentSINC Production Readiness Audit", instructions)
+
+    plan = _explicit_specialist_plan(request)
+    assert plan is not None
+    assert [task["agent_id"] for task in plan["tasks"]] == [
+        "developer", "designer", "researcher", "tester"
+    ]
+    assert "FastAPI endpoints" in plan["tasks"][0]["instructions"]
+    assert "3D office" in plan["tasks"][1]["instructions"]
+    assert "production requirements" in plan["tasks"][2]["instructions"]
+    assert "security boundaries" in plan["tasks"][3]["instructions"]
+
+    def no_workspace_planner_call(_query: str):
+        raise AssertionError("Explicit assignments must not be reinterpreted by the model planner.")
+
+    monkeypatch.setattr(orchestrator, "build_workspace_context", no_workspace_planner_call)
+
+    async def handler(_http_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("The explicit assignment path must not call Ollama to choose specialists.")
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            claimed = _claim_planning()
+            assert claimed is not None
+            await _plan(client, "http://ollama.test", 10, "qwen3:4b", claimed)
+
+    asyncio.run(run())
+
+    detail = get_orchestration_detail(request["id"])
+    assert detail is not None
+    assert detail["status"] == "running"
+    assert detail["stage"] == "executing"
+    assert [task["agent_id"] for task in detail["tasks"]] == [
+        "developer", "designer", "researcher", "tester"
+    ]
+    assert all(task["status"] == "queued" for task in detail["tasks"])
+
+
+
+def test_ceo_output_removes_think_blocks() -> None:
+    content = (
+        "## Final report\nUseful summary.\n"
+        "<think>private internal reasoning that must not be shown</think>\n"
+        "## Recommendations\nKeep backups."
+    )
+    cleaned = _strip_internal_thinking(content)
+    assert "private internal reasoning" not in cleaned
+    assert "<think>" not in cleaned
+    assert "Useful summary." in cleaned
+    assert "Keep backups." in cleaned
+
+
+def test_ceo_output_drops_unterminated_think_block() -> None:
+    cleaned = _strip_internal_thinking("Final answer\n<think>unfinished hidden reasoning")
+    assert cleaned == "Final answer"
+
+
+
+def test_ceo_synthesis_is_told_about_explicitly_requested_but_missing_specialist(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENTSINC_DB_PATH", str(tmp_path / "synthesis-missing-role.sqlite3"))
+    init_db()
+    instructions = """Coordinate all four specialists for the production-readiness audit.
+1. DEVELOPER AGENT
+Review backend architecture, API and task lifecycle.
+2. DESIGNER AGENT
+Review the frontend and 3D office experience.
+3. RESEARCH AGENT
+Review documentation, dependencies and hosting constraints.
+4. QA AGENT
+Review tests, reliability and security boundaries.
+"""
+    parent = create_orchestration("Production readiness audit", instructions)
+    for agent_id in ("developer", "designer", "tester"):
+        with connect() as connection:
+            task_id = str(uuid4())
+            now = "2026-11-16T00:00:00+00:00"
+            title = f"{agent_id} audit report"
+            connection.execute(
+                """INSERT INTO tasks
+                (id, agent_id, title, instructions, status, progress, created_at, updated_at,
+                 started_at, completed_at, result, orchestration_id)
+                VALUES (?, ?, ?, ?, 'completed', 100, ?, ?, ?, ?, ?, ?)""",
+                (task_id, agent_id, title, "Review assigned area and cite actual files.",
+                 now, now, now, now, f"Verified {agent_id} report with backend/app/main.py evidence.", parent["id"]),
+            )
+            connection.commit()
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='running', stage='executing' WHERE id=?",
+            (parent["id"],),
+        )
+        connection.commit()
+
+    captured: dict[str, str] = {}
+
+    async def handler(http_request: httpx.Request) -> httpx.Response:
+        payload = json.loads(http_request.content)
+        captured["user"] = payload["messages"][1]["content"]
+        line = json.dumps({
+            "message": {"content": "## Final audit\nCompleted three reviews.\n<think>do not expose</think>"},
+            "done": True,
+        }) + "\n"
+        return httpx.Response(200, content=line.encode(), headers={"content-type": "application/x-ndjson"})
+
+    async def run() -> None:
+        request = _claim_synthesis()
+        assert request is not None
+        assert request["id"] == parent["id"]
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await _synthesize(client, "http://ollama.test", 10, "qwen3:4b", request)
+
+    asyncio.run(run())
+    final = get_orchestration_detail(parent["id"])
+    assert final is not None
+    assert final["status"] == "completed"
+    assert 'MISSING REQUESTED SPECIALISTS: ["researcher"]' in captured["user"]
+    assert "do not expose" not in final["result"]
+    assert "Completed three reviews." in final["result"]
