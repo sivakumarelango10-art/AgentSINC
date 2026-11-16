@@ -208,9 +208,9 @@ Review automated tests, error handling, runtime reliability, security boundaries
 
 def test_ceo_output_removes_think_blocks() -> None:
     content = (
-        "## Final report\\nUseful summary.\\n"
-        "<think>private internal reasoning that must not be shown</think>\\n"
-        "## Recommendations\\nKeep backups."
+        "## Final report\nUseful summary.\n"
+        "<think>private internal reasoning that must not be shown</think>\n"
+        "## Recommendations\nKeep backups."
     )
     cleaned = _strip_internal_thinking(content)
     assert "private internal reasoning" not in cleaned
@@ -220,5 +220,71 @@ def test_ceo_output_removes_think_blocks() -> None:
 
 
 def test_ceo_output_drops_unterminated_think_block() -> None:
-    cleaned = _strip_internal_thinking("Final answer\\n<think>unfinished hidden reasoning")
+    cleaned = _strip_internal_thinking("Final answer\n<think>unfinished hidden reasoning")
     assert cleaned == "Final answer"
+
+
+
+def test_ceo_synthesis_is_told_about_explicitly_requested_but_missing_specialist(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENTSINC_DB_PATH", str(tmp_path / "synthesis-missing-role.sqlite3"))
+    init_db()
+    instructions = """Coordinate all four specialists for the production-readiness audit.
+1. DEVELOPER AGENT
+Review backend architecture, API and task lifecycle.
+2. DESIGNER AGENT
+Review the frontend and 3D office experience.
+3. RESEARCH AGENT
+Review documentation, dependencies and hosting constraints.
+4. QA AGENT
+Review tests, reliability and security boundaries.
+"""
+    parent = create_orchestration("Production readiness audit", instructions)
+    for agent_id in ("developer", "designer", "tester"):
+        task = orchestrator.create_task if hasattr(orchestrator, "create_task") else None
+        assert task is None  # Child rows are inserted below with their parent ID.
+        with connect() as connection:
+            import uuid
+            task_id = str(uuid.uuid4())
+            now = "2026-11-16T00:00:00+00:00"
+            title = f"{agent_id} audit report"
+            connection.execute(
+                """INSERT INTO tasks
+                (id, agent_id, title, instructions, status, progress, created_at, updated_at,
+                 started_at, completed_at, result, orchestration_id)
+                VALUES (?, ?, ?, ?, 'completed', 100, ?, ?, ?, ?, ?, ?)""",
+                (task_id, agent_id, title, "Review assigned area and cite actual files.",
+                 now, now, now, now, f"Verified {agent_id} report with backend/app/main.py evidence.", parent["id"]),
+            )
+            connection.commit()
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='running', stage='executing' WHERE id=?",
+            (parent["id"],),
+        )
+        connection.commit()
+
+    captured: dict[str, str] = {}
+
+    async def handler(http_request: httpx.Request) -> httpx.Response:
+        payload = json.loads(http_request.content)
+        captured["user"] = payload["messages"][1]["content"]
+        line = json.dumps({
+            "message": {"content": "## Final audit\\nCompleted three reviews.\\n<think>do not expose</think>"},
+            "done": True,
+        }) + "\n"
+        return httpx.Response(200, content=line.encode(), headers={"content-type": "application/x-ndjson"})
+
+    async def run() -> None:
+        request = _claim_synthesis()
+        assert request is not None
+        assert request["id"] == parent["id"]
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            await _synthesize(client, "http://ollama.test", 10, "qwen3:4b", request)
+
+    asyncio.run(run())
+    final = get_orchestration_detail(parent["id"])
+    assert final is not None
+    assert final["status"] == "completed"
+    assert 'MISSING REQUESTED SPECIALISTS: ["researcher"]' in captured["user"]
+    assert "do not expose" not in final["result"]
+    assert "Completed three reviews." in final["result"]
