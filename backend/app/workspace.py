@@ -8,6 +8,8 @@ from typing import Iterable
 
 MAX_INDEX_FILES = 1600
 MAX_FILE_BYTES = 128_000
+MAX_SCAN_BYTES = 24_000_000
+MAX_SEARCH_BYTES_PER_FILE = 16_000
 MAX_CONTEXT_CHARS = 22_000
 ALLOWED_SUFFIXES = {
     ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
@@ -141,6 +143,7 @@ def safe_file_path(relative_path: str) -> Path:
 def iter_workspace_files(max_files: int = MAX_INDEX_FILES) -> Iterable[tuple[str, Path]]:
     root = workspace_root()
     count = 0
+    total_bytes = 0
     for current, directories, names in os.walk(root, topdown=True, followlinks=False):
         current_path = Path(current)
         relative_dir = current_path.relative_to(root)
@@ -162,12 +165,16 @@ def iter_workspace_files(max_files: int = MAX_INDEX_FILES) -> Iterable[tuple[str
                     continue
                 if path.suffix.lower() not in ALLOWED_SUFFIXES:
                     continue
-                if path.stat().st_size > MAX_FILE_BYTES:
+                file_size = path.stat().st_size
+                if file_size > MAX_FILE_BYTES:
                     continue
+                if total_bytes + file_size > MAX_SCAN_BYTES:
+                    return
             except OSError:
                 continue
             yield relative.as_posix(), path
             count += 1
+            total_bytes += file_size
             if count >= max(1, min(max_files, MAX_INDEX_FILES)):
                 return
 
@@ -197,7 +204,8 @@ def search_workspace(query: str, max_results: int = 12) -> list[dict[str, str | 
     results: list[dict[str, str | int]] = []
     for relative, path in iter_workspace_files():
         try:
-            content = path.read_text(encoding="utf-8", errors="replace")
+            with path.open("rb") as file_handle:
+                content = file_handle.read(MAX_SEARCH_BYTES_PER_FILE).decode("utf-8", errors="replace")
         except OSError:
             continue
         content = redact_sensitive_text(content)
