@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -10,6 +10,10 @@ from .workspace import WorkspaceError, build_workspace_context
 
 SPECIALIST_IDS = ("developer", "designer", "researcher", "tester")
 MAX_SPECIALIST_TASKS = 4
+
+
+class OrchestrationCancelled(Exception):
+    """Raised when the founder cancels CEO planning or synthesis."""
 
 
 def orchestration_cancelled(orchestration_id: str) -> bool:
@@ -39,26 +43,47 @@ async def _chat(
     messages: list[dict[str, str]],
     timeout_seconds: float,
     json_mode: bool = False,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
-        "stream": False,
+        "stream": True,
         "keep_alive": "10m",
         "options": {"temperature": 0.18},
     }
     if json_mode:
         payload["format"] = "json"
-    response = await client.post(
+
+    chunks: list[str] = []
+    async with client.stream(
+        "POST",
         f"{base_url}/api/chat",
         json=payload,
         timeout=httpx.Timeout(timeout_seconds, connect=5.0),
-    )
-    response.raise_for_status()
-    content = response.json().get("message", {}).get("content", "")
-    if not isinstance(content, str) or not content.strip():
+    ) as response:
+        response.raise_for_status()
+        async for line in response.aiter_lines():
+            if cancel_check and cancel_check():
+                raise OrchestrationCancelled("Founder cancelled the CEO request.")
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            content = item.get("message", {}).get("content", "")
+            if content:
+                chunks.append(content)
+            if item.get("done"):
+                break
+
+    if cancel_check and cancel_check():
+        raise OrchestrationCancelled("Founder cancelled the CEO request.")
+    result = "".join(chunks).strip()
+    if not result:
         raise RuntimeError("Ollama returned an empty orchestration response.")
-    return content.strip()
+    return result
 
 
 def _json_object(content: str) -> dict[str, Any]:
@@ -230,8 +255,12 @@ async def _plan(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             timeout_seconds,
             json_mode=True,
+            cancel_check=lambda: orchestration_cancelled(orchestration_id),
         )
         plan = _validate_plan(_json_object(raw))
+    except OrchestrationCancelled:
+        _cancel(orchestration_id, "Founder cancelled the request during CEO planning.")
+        return
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
         if orchestration_cancelled(orchestration_id):
             _cancel(orchestration_id, "Founder cancelled the request while CEO planning was running.")
@@ -416,7 +445,11 @@ async def _synthesize(
             client, base_url, model,
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             timeout_seconds,
+            cancel_check=lambda: orchestration_cancelled(orchestration_id),
         )
+    except OrchestrationCancelled:
+        _cancel(orchestration_id, "Founder cancelled the request during CEO synthesis.")
+        return
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
         if orchestration_cancelled(orchestration_id):
             _cancel(orchestration_id, "Founder cancelled the request while CEO synthesis was running.")
