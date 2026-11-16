@@ -93,12 +93,36 @@ def init_db() -> None:
                 value TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS orchestrations (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                instructions TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued',
+                stage TEXT NOT NULL DEFAULT 'planning',
+                plan_json TEXT,
+                result TEXT,
+                error TEXT,
+                cancel_requested INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT
+            );
             CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_agent_created ON tasks(agent_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_events_agent_created ON events(agent_id, created_at DESC);
             """
         )
+        task_columns = {row["name"] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
+        if "orchestration_id" not in task_columns:
+            connection.execute("ALTER TABLE tasks ADD COLUMN orchestration_id TEXT REFERENCES orchestrations(id)")
+        event_columns = {row["name"] for row in connection.execute("PRAGMA table_info(events)").fetchall()}
+        if "orchestration_id" not in event_columns:
+            connection.execute("ALTER TABLE events ADD COLUMN orchestration_id TEXT REFERENCES orchestrations(id)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_tasks_orchestration ON tasks(orchestration_id, status)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_orchestrations_status_stage ON orchestrations(status, stage, created_at)")
+
         existing = connection.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
         if existing == 0:
             now = utc_now()
@@ -113,10 +137,19 @@ def init_db() -> None:
         connection.commit()
 
 
-def add_event(connection: sqlite3.Connection, agent_id: str, task_id: str | None, event_type: str, message: str) -> None:
+def add_event(
+    connection: sqlite3.Connection,
+    agent_id: str,
+    task_id: str | None,
+    event_type: str,
+    message: str,
+    orchestration_id: str | None = None,
+) -> None:
     connection.execute(
-        "INSERT INTO events (agent_id, task_id, event_type, message, created_at) VALUES (?, ?, ?, ?, ?)",
-        (agent_id, task_id, event_type, message, utc_now()),
+        """INSERT INTO events
+        (agent_id, task_id, event_type, message, created_at, orchestration_id)
+        VALUES (?, ?, ?, ?, ?, ?)""",
+        (agent_id, task_id, event_type, message, utc_now(), orchestration_id),
     )
 
 
@@ -153,6 +186,7 @@ def task_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "result": row["result"], "error": row["error"], "cancel_requested": bool(row["cancel_requested"]),
         "created_at": row["created_at"], "updated_at": row["updated_at"],
         "started_at": row["started_at"], "completed_at": row["completed_at"],
+        "orchestration_id": row["orchestration_id"] if "orchestration_id" in row.keys() else None,
     }
 
 
@@ -160,6 +194,7 @@ def event_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {
         "id": row["id"], "agent_id": row["agent_id"], "task_id": row["task_id"],
         "event_type": row["event_type"], "message": row["message"], "created_at": row["created_at"],
+        "orchestration_id": row["orchestration_id"] if "orchestration_id" in row.keys() else None,
     }
 
 
@@ -186,3 +221,62 @@ def create_task(agent_id: str, title: str, instructions: str) -> dict[str, Any]:
         row = connection.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
         connection.commit()
         return task_to_dict(row)
+
+
+def orchestration_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "instructions": row["instructions"],
+        "status": row["status"],
+        "stage": row["stage"],
+        "plan": json.loads(row["plan_json"]) if row["plan_json"] else None,
+        "result": row["result"],
+        "error": row["error"],
+        "cancel_requested": bool(row["cancel_requested"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "started_at": row["started_at"],
+        "completed_at": row["completed_at"],
+    }
+
+
+def create_orchestration(title: str, instructions: str) -> dict[str, Any]:
+    orchestration_id = str(uuid4())
+    now = utc_now()
+    with connect() as connection:
+        connection.execute(
+            """INSERT INTO orchestrations
+            (id, title, instructions, status, stage, created_at, updated_at)
+            VALUES (?, ?, ?, 'queued', 'planning', ?, ?)""",
+            (orchestration_id, title.strip(), instructions.strip(), now, now),
+        )
+        add_event(
+            connection, "ceo", None, "orchestration_queued",
+            f'CEO received request: "{title.strip()}"',
+            orchestration_id=orchestration_id,
+        )
+        row = connection.execute("SELECT * FROM orchestrations WHERE id=?", (orchestration_id,)).fetchone()
+        connection.commit()
+        return orchestration_to_dict(row)
+
+
+def get_orchestration_detail(orchestration_id: str) -> dict[str, Any] | None:
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT * FROM orchestrations WHERE id=?", (orchestration_id,)
+        ).fetchone()
+        if not row:
+            return None
+        children = connection.execute(
+            "SELECT * FROM tasks WHERE orchestration_id=? ORDER BY created_at ASC",
+            (orchestration_id,),
+        ).fetchall()
+        child_tasks = [task_to_dict(child) for child in children]
+        result = orchestration_to_dict(row)
+        result["tasks"] = child_tasks
+        result["progress"] = (
+            round(sum(task["progress"] for task in child_tasks) / len(child_tasks))
+            if child_tasks else (100 if row["status"] == "completed" else 0)
+        )
+        return result

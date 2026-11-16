@@ -120,3 +120,47 @@ def test_workspace_api_can_search_real_repository_files() -> None:
     assert response.status_code == 200
     paths = [item["path"] for item in response.json()["results"]]
     assert "backend/app/worker.py" in paths
+
+
+def test_ceo_orchestration_is_persisted_and_visible_in_overview() -> None:
+    response = client.post(
+        "/api/v1/orchestrations",
+        json={
+            "title": "Prepare the next AgentSINC release plan",
+            "instructions": "Review the current repository and coordinate specialists to recommend the safest next release milestones.",
+        },
+    )
+    assert response.status_code == 201
+    orchestration = response.json()["orchestration"]
+    assert orchestration["status"] == "queued"
+    assert orchestration["stage"] == "planning"
+    assert orchestration["plan"] is None
+
+    detail = client.get(f"/api/v1/orchestrations/{orchestration['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["orchestration"]["tasks"] == []
+
+    overview = client.get("/api/v1/overview").json()
+    assert any(item["id"] == orchestration["id"] for item in overview["orchestrations"])
+
+
+def test_queued_ceo_orchestration_can_be_cancelled() -> None:
+    created = client.post(
+        "/api/v1/orchestrations",
+        json={
+            "title": "Create a short design research plan",
+            "instructions": "Coordinate specialist analysis of the current design and propose a short improvement plan.",
+        },
+    )
+    orchestration_id = created.json()["orchestration"]["id"]
+    cancelled = client.post(f"/api/v1/orchestrations/{orchestration_id}/cancel")
+    assert cancelled.status_code == 200
+
+    detail = client.get(f"/api/v1/orchestrations/{orchestration_id}").json()["orchestration"]
+    assert detail["status"] == "cancelled"
+    assert detail["stage"] == "cancelled"
+
+
+def test_unknown_ceo_orchestration_returns_not_found() -> None:
+    response = client.get("/api/v1/orchestrations/not-a-real-id")
+    assert response.status_code == 404

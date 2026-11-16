@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from .db import add_event, agent_to_dict, connect, create_task, event_to_dict, init_db, set_runtime_value, task_to_dict, utc_now
+from .db import add_event, agent_to_dict, connect, create_task, create_orchestration, event_to_dict, get_orchestration_detail, init_db, orchestration_to_dict, set_runtime_value, task_to_dict, utc_now
 from .workspace import WorkspaceError, list_workspace_files, read_workspace_file, search_workspace, workspace_summary
 
 
@@ -21,6 +21,11 @@ class CreateTaskRequest(BaseModel):
     agent_id: str = Field(min_length=1, max_length=40)
     title: str = Field(min_length=3, max_length=120)
     instructions: str = Field(min_length=10, max_length=12000)
+
+
+class CreateOrchestrationRequest(BaseModel):
+    title: str = Field(min_length=3, max_length=120)
+    instructions: str = Field(min_length=20, max_length=12000)
 
 
 class AgentControlRequest(BaseModel):
@@ -61,6 +66,9 @@ def create_app() -> FastAPI:
             task_rows = connection.execute("SELECT * FROM tasks ORDER BY created_at DESC LIMIT 100").fetchall()
             event_rows = connection.execute("SELECT * FROM events ORDER BY id DESC LIMIT 80").fetchall()
             runtime_rows = connection.execute("SELECT key, value, updated_at FROM runtime_state").fetchall()
+            orchestration_rows = connection.execute(
+                "SELECT * FROM orchestrations ORDER BY created_at DESC LIMIT 30"
+            ).fetchall()
             current_tasks = connection.execute(
                 """SELECT t.* FROM tasks t
                 WHERE t.status IN ('queued', 'running')
@@ -131,6 +139,7 @@ def create_app() -> FastAPI:
             "agents": agents,
             "tasks": [task_to_dict(row) for row in task_rows],
             "events": [event_to_dict(row) for row in event_rows],
+            "orchestrations": [get_orchestration_detail(row["id"]) for row in orchestration_rows],
             "runtime": {
                 "api_connected": True,
                 "worker_online": worker_online,
@@ -143,6 +152,62 @@ def create_app() -> FastAPI:
                 "execution_mode": "local-ollama",
             },
         }
+
+    @app.post("/api/v1/orchestrations", status_code=201)
+    def submit_orchestration(payload: CreateOrchestrationRequest) -> dict:
+        orchestration = create_orchestration(payload.title, payload.instructions)
+        return {"orchestration": orchestration}
+
+    @app.get("/api/v1/orchestrations/{orchestration_id}")
+    def read_orchestration(orchestration_id: str) -> dict:
+        orchestration = get_orchestration_detail(orchestration_id)
+        if not orchestration:
+            raise HTTPException(status_code=404, detail="CEO orchestration not found.")
+        return {"orchestration": orchestration}
+
+    @app.post("/api/v1/orchestrations/{orchestration_id}/cancel")
+    def cancel_orchestration(orchestration_id: str) -> dict:
+        with connect() as connection:
+            orchestration = connection.execute(
+                "SELECT * FROM orchestrations WHERE id=?", (orchestration_id,)
+            ).fetchone()
+            if not orchestration:
+                raise HTTPException(status_code=404, detail="CEO orchestration not found.")
+            if orchestration["status"] in ("completed", "failed", "cancelled"):
+                raise HTTPException(status_code=409, detail="This orchestration is already finished.")
+            now = utc_now()
+            connection.execute(
+                "UPDATE orchestrations SET cancel_requested=1, updated_at=? WHERE id=?",
+                (now, orchestration_id),
+            )
+            connection.execute(
+                """UPDATE tasks SET status='cancelled', updated_at=?, completed_at=?, error='Cancelled with parent CEO request'
+                WHERE orchestration_id=? AND status='queued'""",
+                (now, now, orchestration_id),
+            )
+            connection.execute(
+                """UPDATE tasks SET cancel_requested=1, updated_at=?
+                WHERE orchestration_id=? AND status='running'""",
+                (now, orchestration_id),
+            )
+            remaining = connection.execute(
+                "SELECT COUNT(*) FROM tasks WHERE orchestration_id=? AND status='running'",
+                (orchestration_id,),
+            ).fetchone()[0]
+            if orchestration["status"] == "queued" or (
+                orchestration["stage"] == "executing" and remaining == 0
+            ):
+                connection.execute(
+                    "UPDATE orchestrations SET status='cancelled', stage='cancelled', completed_at=?, updated_at=? WHERE id=?",
+                    (now, now, orchestration_id),
+                )
+            add_event(
+                connection, "ceo", None, "orchestration_cancel_requested",
+                "Founder requested cancellation of the CEO orchestration.",
+                orchestration_id=orchestration_id,
+            )
+            connection.commit()
+        return {"ok": True, "orchestration_id": orchestration_id}
 
     @app.get("/api/v1/workspace/summary")
     def get_workspace_summary() -> dict:

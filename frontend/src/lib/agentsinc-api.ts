@@ -19,6 +19,26 @@ export type AgentTask = {
   completed_at: string | null;
 };
 
+export type OrchestrationStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export type AgentOrchestration = {
+  id: string;
+  title: string;
+  instructions: string;
+  status: OrchestrationStatus;
+  stage: "planning" | "executing" | "synthesizing" | "completed" | "failed" | "cancelled";
+  plan: { summary: string; tasks: Array<{ agent_id: string; title: string; instructions: string }> } | null;
+  result: string | null;
+  error: string | null;
+  cancel_requested: boolean;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  progress: number;
+  tasks: AgentTask[];
+};
+
 export type AgentEvent = {
   id: number;
   agent_id: string;
@@ -52,6 +72,7 @@ export type RuntimeOverview = {
   agents: import("../components/office/types").OfficeAgent[];
   tasks: AgentTask[];
   events: AgentEvent[];
+  orchestrations: AgentOrchestration[];
   runtime: RuntimeStatus;
 };
 
@@ -95,6 +116,22 @@ export function createMission(input: {
   return request("/api/v1/tasks", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function createOrchestration(input: {
+  title: string;
+  instructions: string;
+}): Promise<{ orchestration: AgentOrchestration }> {
+  return request("/api/v1/orchestrations", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function cancelOrchestration(orchestrationId: string): Promise<{ ok: boolean }> {
+  return request(`/api/v1/orchestrations/${encodeURIComponent(orchestrationId)}/cancel`, {
+    method: "POST",
   });
 }
 
