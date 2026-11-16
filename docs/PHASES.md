@@ -67,9 +67,31 @@ Acceptance:
 - Users can only access data/actions allowed by their roles.
 - Migration and backup/restore procedures are tested.
 
-## Phase 4 — AI runtime and CEO orchestration
+## Phase 4A — Repository-aware local agents (in progress)
 
-**Goal:** connect a model provider and make the CEO agent plan and delegate work.
+**Goal:** allow local agents to ground their analysis in the actual AgentSINC codebase without granting unrestricted host access.
+
+Implemented on the Phase 4A branch:
+- Read-only workspace rooted at the repository directory, with an optional explicit root override.
+- Path confinement, traversal and symlink rejection, dependency/build folder exclusions and sensitive-file filtering.
+- Common credential/token redaction before snippets are shown to Ollama.
+- Bounded project file inventory, lexical search, file reading and context assembly.
+- Mission prompts receive real source/documentation excerpts and are instructed to cite relative file paths.
+- Local API endpoints expose workspace summary, file inventory, search and safe read.
+- Tests cover workspace confinement, excluded paths, evidence retrieval and redaction.
+
+Acceptance:
+- Run the architecture-roadmap mission on Elango's Windows machine and verify it cites files that exist in the local repository.
+- Confirm .env, dependency folders, virtual environments, build output and local SQLite data are excluded.
+- Confirm traversal and symlink attempts are rejected.
+- Confirm the model never claims to modify files, run tests or deploy.
+- Measure indexing/search latency on the actual E: workspace.
+
+Remaining: human-reviewed file patch proposals and apply-after-approval workflow are separate follow-up work. No shell or write tool is granted in this phase.
+
+## Phase 4B — CEO orchestration and specialist handoffs
+
+**Goal:** make the CEO agent plan work and delegate explicit sub-missions to specialists.
 
 Deliverables:
 - Provider adapter contract with development and production configuration.
