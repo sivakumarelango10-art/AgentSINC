@@ -15,16 +15,31 @@ from app.db import set_runtime_value  # noqa: E402
 client = TestClient(app)
 
 
-def test_overview_has_five_idle_agents_and_no_fake_tasks() -> None:
+def test_overview_has_six_idle_office_agents_and_no_fake_tasks() -> None:
     response = client.get("/api/v1/overview")
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload["agents"]) == 5
+    assert len(payload["agents"]) == 6
     assert {agent["id"] for agent in payload["agents"]} == {
-        "ceo", "developer", "designer", "researcher", "tester"
+        "ceo", "team_lead", "developer", "designer", "researcher", "tester"
     }
     assert all(agent["status"] == "idle" for agent in payload["agents"])
     assert payload["tasks"] == []
+    assert payload["runtime"]["memory_records"] == 0
+    assert "google_search_enabled" in payload["runtime"]
+
+
+def test_team_lead_cannot_receive_direct_task_outside_orchestration() -> None:
+    response = client.post(
+        "/api/v1/tasks",
+        json={
+            "agent_id": "team_lead",
+            "title": "Coordinate a release review",
+            "instructions": "Delegate research, design, development and QA reviews, then consolidate reports.",
+        },
+    )
+    assert response.status_code == 409
+    assert "orchestration" in response.json()["detail"].lower()
 
 
 def test_create_mission_persists_task_and_timeline_event() -> None:
