@@ -108,7 +108,11 @@ def _claim_planning() -> dict[str, Any] | None:
     with connect() as connection:
         connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
-            "SELECT * FROM orchestrations WHERE status='queued' AND stage='planning' ORDER BY created_at ASC LIMIT 1"
+            """SELECT * FROM orchestrations
+            WHERE status='queued' AND stage='planning'
+            AND NOT EXISTS (SELECT 1 FROM orchestrations active WHERE active.status='running')
+            AND EXISTS (SELECT 1 FROM agents WHERE id='ceo' AND is_paused=0)
+            ORDER BY created_at ASC LIMIT 1"""
         ).fetchone()
         if not row:
             connection.commit()
@@ -117,6 +121,10 @@ def _claim_planning() -> dict[str, Any] | None:
         connection.execute(
             "UPDATE orchestrations SET status='running', started_at=?, updated_at=? WHERE id=? AND status='queued'",
             (now, now, row["id"]),
+        )
+        connection.execute(
+            "UPDATE agents SET status='thinking', updated_at=? WHERE id='ceo'",
+            (now,),
         )
         add_event(
             connection, "ceo", None, "orchestration_planning",
@@ -136,6 +144,10 @@ def _fail(orchestration_id: str, message: str) -> None:
             "UPDATE orchestrations SET status='failed', stage='failed', error=?, updated_at=?, completed_at=? WHERE id=?",
             (safe_message, now, now, orchestration_id),
         )
+        connection.execute(
+            "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+            (now,),
+        )
         add_event(
             connection, "ceo", None, "orchestration_failed",
             f"CEO orchestration failed: {safe_message[:240]}",
@@ -150,6 +162,10 @@ def _cancel(orchestration_id: str, message: str) -> None:
         connection.execute(
             "UPDATE orchestrations SET status='cancelled', stage='cancelled', error=?, updated_at=?, completed_at=? WHERE id=?",
             (message[:500], now, now, orchestration_id),
+        )
+        connection.execute(
+            "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+            (now,),
         )
         add_event(
             connection, "ceo", None, "orchestration_cancelled", message,
@@ -285,6 +301,10 @@ async def _plan(
                 f"CEO delegated a mission: {item['title']}",
                 orchestration_id=orchestration_id,
             )
+        connection.execute(
+            "UPDATE agents SET status='collaborating', updated_at=? WHERE id='ceo'",
+            (now,),
+        )
         add_event(
             connection, "ceo", None, "orchestration_delegated",
             f"CEO delegated {len(plan['tasks'])} specialist missions. {plan['summary']}",
@@ -337,6 +357,10 @@ def _claim_synthesis() -> dict[str, Any] | None:
         connection.execute(
             "UPDATE orchestrations SET stage='synthesizing', updated_at=? WHERE id=?",
             (now, row["id"]),
+        )
+        connection.execute(
+            "UPDATE agents SET status='thinking', updated_at=? WHERE id='ceo'",
+            (now,),
         )
         children = connection.execute(
             """SELECT t.*, a.name AS agent_name, a.role AS agent_role
@@ -409,12 +433,20 @@ async def _synthesize(
             (result, now, now, orchestration_id),
         )
         if updated.rowcount == 1:
+            connection.execute(
+                "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+                (now,),
+            )
             add_event(
                 connection, "ceo", None, "orchestration_completed",
                 f'CEO completed the founder request: "{request["title"]}".',
                 orchestration_id=orchestration_id,
             )
         else:
+            connection.execute(
+                "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+                (now,),
+            )
             connection.execute(
                 """UPDATE orchestrations SET status='cancelled', stage='cancelled',
                 error='Founder cancelled the CEO request.', updated_at=?, completed_at=? WHERE id=?""",
