@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import {
   BRAND_THEMES,
   INITIAL_AGENTS,
@@ -272,7 +272,7 @@ export function OfficeExperience() {
             </div>
 
             <div className="selected-agent">
-              <div className="agent-emblem" style={{ "--agent-color": selectedAgent.color } as React.CSSProperties}>
+              <div className="agent-emblem" style={{ "--agent-color": selectedAgent.color } as CSSProperties}>
                 <span>{selectedAgent.role === "Chief Orchestrator" ? "✳" : selectedAgent.name.slice(0, 1)}</span>
               </div>
               <div className="selected-agent-name">
@@ -308,7 +308,7 @@ export function OfficeExperience() {
                     onClick={() => setSelectedAgentId(agent.id)}
                     aria-pressed={agent.id === selectedAgentId}
                   >
-                    <span style={{ "--agent-color": agent.color } as React.CSSProperties}>{agent.name.slice(0, 1)}</span>
+                    <span style={{ "--agent-color": agent.color } as CSSProperties}>{agent.name.slice(0, 1)}</span>
                     <small>{agent.role}</small>
                     <i className={statusClass(agent.status)} />
                   </button>
@@ -443,7 +443,7 @@ function OfficeMap2D({
               left: position.x,
               top: position.y,
               "--agent-color": agent.color,
-            } as React.CSSProperties}
+            } as CSSProperties}
             onClick={() => onSelect(agent.id)}
           >
             <span>{agent.name.slice(0, 1)}</span>
