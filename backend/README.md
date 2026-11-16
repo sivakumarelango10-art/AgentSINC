@@ -1,12 +1,83 @@
-# AgentSINC API
+# AgentSINC local runtime
 
-This directory will contain the FastAPI service.
+This is the first executable AgentSINC runtime. It is local-first and uses:
 
-Planned responsibilities:
-- Authentication and authorization.
-- Team, employee, agent, task, conversation and approval APIs.
-- PostgreSQL models and Alembic migrations.
-- Provider adapter and orchestration contracts.
-- Durable event publication and health/readiness endpoints.
+- FastAPI for a localhost-only API.
+- SQLite for durable agent, mission and event history.
+- Ollama for local model inference; no paid model API key is required.
+- A separate Python worker that polls queued missions, writes progress, and publishes a heartbeat.
 
-The API is the system-of-record boundary. It does not run long model tasks inside request handlers; it records and enqueues work for the worker.
+The 3D office is a client. Closing the browser does not stop the worker.
+
+## Requirements
+
+- Python 3.11 or newer.
+- Ollama installed and running on this computer.
+- At least one chat model installed in Ollama.
+- Node.js is needed separately for the frontend.
+
+No PostgreSQL, Redis, paid API, cloud VM or paid hosting is used by this local MVP.
+
+## Install on Windows
+
+From PowerShell:
+
+    cd E:\AgentSINC\backend
+    py -3 -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+
+Check Ollama:
+
+    ollama list
+
+If Ollama is not running, launch the Ollama application first. The runtime automatically detects installed models and selects a local model. You can later select a different installed model in the AgentSINC Studio panel.
+
+## Start the API
+
+Open one PowerShell window:
+
+    cd E:\AgentSINC\backend
+    .\.venv\Scripts\Activate.ps1
+    uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+## Start the 24/7 local worker
+
+Open a second PowerShell window:
+
+    cd E:\AgentSINC\backend
+    .\.venv\Scripts\Activate.ps1
+    python -m app.worker
+
+Keep both processes and Ollama running. The API and worker bind to localhost; do not change the host to 0.0.0.0 or expose port 8000 publicly. The frontend polls the API every few seconds and displays the worker heartbeat and Ollama availability.
+
+## One-click launcher
+
+After creating the virtual environment and installing the requirements, run from the repository root:
+
+    .\infra\start-local.ps1
+
+It opens separate API and worker PowerShell windows. Keep both open while the local runtime is in use.
+
+## What works in this phase
+
+- Real, persistent five-agent roster.
+- Create a mission and assign it to an agent.
+- Queue, run, complete and fail mission states.
+- Per-agent and global event history.
+- Pause/resume an agent (pause prevents new missions; an in-flight local model response finishes).
+- Cancel queued work immediately or request cancellation while a response is streaming.
+- Retry failed/cancelled missions.
+- View the current result and task progress in the workspace.
+- See API, worker heartbeat, Ollama connection, installed models and selected model.
+
+## Honest capability boundary
+
+The local worker currently asks Ollama to analyse a task and produce a textual deliverable. It has no shell, browser, network research, source-control write, file-edit, deployment, email or payment tools. It must not claim those actions have been completed. Tool execution is intentionally disabled until a separately isolated sandbox, permissions and human approval workflow are implemented.
+
+## Zero-cost and 24/7 expectations
+
+Ollama local inference and this runtime do not charge per model call. Your computer supplies the CPU/GPU, RAM, storage, electricity and network connection. For continuous operation, Windows must stay awake, Ollama/API/worker must remain running, and the computer must remain powered and connected. If the PC sleeps, shuts down, loses power or loses connectivity, the worker pauses. This is a 24/7-capable local setup, not a guaranteed cloud SLA.
+
+A free cloud web tier is not a dependable substitute for the always-on worker. Public remote access, multi-user authentication, backup/restore, sandboxing and production monitoring are later phases.
