@@ -74,14 +74,17 @@ def create_app() -> FastAPI:
             if current:
                 item["currentTask"] = current["title"]
                 item["progress"] = current["progress"]
-                item["status"] = "paused" if item["paused"] else (
-                    "working" if current["status"] == "running" else "queued"
+                item["status"] = (
+                    "working" if current["status"] == "running"
+                    else ("paused" if item["paused"] else "queued")
                 )
             elif item["paused"]:
                 item["status"] = "paused"
             else:
                 queued = next((t for t in task_map.values() if t["agent_id"] == item["id"]), None)
-                item["status"] = "queued" if queued else "idle"
+                item["status"] = "paused" if item["paused"] else (
+                    "queued" if queued else ("failed" if row["status"] == "failed" else "idle")
+                )
             agents.append(item)
 
         state = {row["key"]: {"value": row["value"], "updated_at": row["updated_at"]} for row in runtime_rows}
