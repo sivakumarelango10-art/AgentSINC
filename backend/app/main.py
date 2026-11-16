@@ -69,6 +69,14 @@ def create_app() -> FastAPI:
             orchestration_rows = connection.execute(
                 "SELECT * FROM orchestrations ORDER BY created_at DESC LIMIT 30"
             ).fetchall()
+            active_orchestration = connection.execute(
+                "SELECT * FROM orchestrations WHERE status='running' ORDER BY created_at ASC LIMIT 1"
+            ).fetchone()
+            active_orchestration_progress = connection.execute(
+                """SELECT AVG(progress) AS progress FROM tasks
+                WHERE orchestration_id=?""",
+                (active_orchestration["id"],),
+            ).fetchone()["progress"] if active_orchestration else 0
             current_tasks = connection.execute(
                 """SELECT t.* FROM tasks t
                 WHERE t.status IN ('queued', 'running')
@@ -79,6 +87,15 @@ def create_app() -> FastAPI:
         agents = []
         for row in agent_rows:
             item = agent_to_dict(row)
+            if row["id"] == "ceo" and active_orchestration:
+                item["currentTask"] = active_orchestration["title"]
+                item["progress"] = round(active_orchestration_progress or 0)
+                item["status"] = "paused" if item["paused"] else (
+                    "thinking" if active_orchestration["stage"] in ("planning", "synthesizing")
+                    else "collaborating"
+                )
+                agents.append(item)
+                continue
             current = task_map.get(row["current_task_id"])
             if current:
                 item["currentTask"] = current["title"]
