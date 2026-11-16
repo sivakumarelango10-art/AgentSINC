@@ -403,15 +403,23 @@ function WorkDesk({
         <boxGeometry args={[0.18, 0.035, 0.2]} />
         <meshPhysicalMaterial color="#E8EDF3" roughness={0.38} />
       </mesh>
-      <OfficeChair color={color} position={[0, 0, 1.05]} />
+      <OfficeChair color={color} position={[0, 0, 1.05]} rotation={[0, Math.PI, 0]} />
       <DeskLamp color={color} position={[-0.72, 0.88, -0.28]} />
     </group>
   );
 }
 
-function OfficeChair({ color, position }: { color: string; position: [number, number, number] }) {
+function OfficeChair({
+  color,
+  position,
+  rotation = [0, 0, 0],
+}: {
+  color: string;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+}) {
   return (
-    <group position={position}>
+    <group position={position} rotation={rotation}>
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.68, 0.13, 0.64]} />
         <meshPhysicalMaterial color={color} roughness={0.83} metalness={0.01} clearcoat={0.08} />
@@ -860,17 +868,17 @@ function AgentAvatar({
         ) : null}
       </group>
 
-      <mesh castShadow position={[-0.13, 0.43, 0]}>
-        <capsuleGeometry args={[0.088, 0.47, 6, 12]} />
-        <meshPhysicalMaterial color="#45536A" roughness={0.86} />
-      </mesh>
-      <mesh castShadow position={[0.13, 0.43, 0]}>
-        <capsuleGeometry args={[0.088, 0.47, 6, 12]} />
-        <meshPhysicalMaterial color="#45536A" roughness={0.86} />
-      </mesh>
-      {[-0.14, 0.14].map((side) => (
-        <group key={side}>
-          <mesh castShadow position={[side, 0.105, 0.055]} scale={[1, 0.62, 1.52]}>
+      {[-0.13, 0.13].map((side) => (
+        <group key={side} position={[side, 0.72, 0.05]}>
+          <mesh castShadow position={[0, -0.02, 0.24]} rotation={[Math.PI / 2, 0, 0]}>
+            <capsuleGeometry args={[0.09, 0.34, 6, 12]} />
+            <meshPhysicalMaterial color="#45536A" roughness={0.86} />
+          </mesh>
+          <mesh castShadow position={[0, -0.32, 0.48]}>
+            <capsuleGeometry args={[0.078, 0.29, 6, 12]} />
+            <meshPhysicalMaterial color="#45536A" roughness={0.86} />
+          </mesh>
+          <mesh castShadow position={[0, -0.55, 0.58]} scale={[1, 0.62, 1.52]}>
             <sphereGeometry args={[0.115, 18, 14]} />
             <meshPhysicalMaterial color="#253247" roughness={0.55} />
           </mesh>
