@@ -12,6 +12,7 @@ from app.workspace import (
     safe_file_path,
     search_workspace,
     workspace_summary,
+    redact_sensitive_text,
 )
 
 
@@ -90,3 +91,17 @@ def test_workspace_summary_is_explicitly_read_only(tmp_path: Path, monkeypatch: 
     assert summary["root_name"] == "AgentSINC"
     assert summary["read_only"] is True
     assert summary["sensitive_files_excluded"] is True
+
+
+def test_redaction_removes_common_secret_values() -> None:
+    source = (
+        'API_KEY="test-secret-value-123"\\n'
+        '{"access_token": "json-secret-token-123"}\\n'
+        'Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456\\n'
+        'github_pat_abcdefghijklmnopqrstuvwxyz123456\\n'
+    )
+    redacted = redact_sensitive_text(source)
+    assert "test-secret-value-123" not in redacted
+    assert "json-secret-token-123" not in redacted
+    assert "abcdefghijklmnopqrstuvwxyz123456" not in redacted
+    assert "REDACTED" in redacted
