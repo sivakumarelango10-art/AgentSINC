@@ -176,3 +176,18 @@ Acceptance:
 ## Working rule
 
 Finish and verify one phase before starting the next. A working screen is not proof that the API, database, worker, security controls or 24/7 operations are complete.
+
+
+## Phase 4B.1 — Reliable CEO planning output
+
+A live Windows test found that the installed Qwen 3 model could return a JSON object without the required `summary` field. The orchestration validator therefore stopped before creating specialist missions.
+
+The planner now:
+- Uses Ollama JSON-schema structured output with required `summary` and `tasks` fields.
+- Disables Qwen 3 thinking for deterministic orchestration JSON and synthesis output.
+- Sets temperature to zero and bounds planning output tokens.
+- Accepts a small set of equivalent plan/task aliases as a compatibility fallback.
+- Derives a factual one-line summary from validated specialist task titles if the model omits only the summary field.
+- Still rejects missing, empty, invalid or out-of-scope specialist task lists.
+
+Regression coverage verifies schema usage, Qwen thinking configuration, missing-summary recovery, supported aliases, and rejection of invalid delegation. Existing sequential worker and human-controlled tool boundaries remain unchanged.
