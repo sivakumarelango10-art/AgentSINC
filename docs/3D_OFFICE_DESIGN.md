@@ -33,12 +33,17 @@ Rooms are 3D navigation metaphors. Tasks, agent identities and activity remain s
 
 ## Visual language
 
-The current design is a cinematic dark digital office:
-- Layered glass surfaces and subtle borders for overlays.
-- Warm, controlled light, deep blue structural materials and room-specific accent strips.
-- Floating room and agent labels that remain legible over the scene.
-- Brand theme can switch between cyan/violet, ember and indigo/lime.
+The selected direction is a **white-first, realistic modern technology headquarters**:
+- White and warm-white are the primary surfaces for the interface, architecture and furniture.
+- Use natural materials such as oak/walnut veneer, pale stone, brushed aluminum, ceramic, clear/frosted glass, fabric upholstery and realistic foliage.
+- Bring color through room identity, textiles, artwork, screens, agent clothing and accent lighting rather than turning the entire environment into a dark neon scene.
+- Department palette: orchid/violet for Command, sky/cobalt for Development, coral/rose for Design, amber for Research and emerald for Quality.
+- The studio theme control can switch complementary accent combinations while keeping the white architectural base consistent.
+- Use daylight, soft shadow contact, restrained reflections and realistic roughness/metalness values.
+- Keep overlays bright, translucent and legible with dark charcoal typography.
 - Avoid a dense traditional admin sidebar, multi-card dashboard grid, large blank margins or a tiny 3D viewport.
+
+The first pass uses original procedural geometry and physically based materials to establish realistic proportions and surfaces. Photorealistic asset models and fine-detail prop dressing can be added later without replacing the original layout or interactions.
 
 ## Character system
 
@@ -66,7 +71,7 @@ Agent animations are driven by state data. Never animate a completed status when
 Implemented in the Phase 2 branch:
 - Full-window 3D viewport and original office environment.
 - Command hub, glass meeting room, specialist departments, desks, shelves, test bench, moodboard, plants and branded reception wall.
-- Stylized selectable agent characters.
+- Selectable agent characters with natural skin/hair tones and department-colored clothing.
 - Room-focused orbit targets.
 - Floating workspace UI, panel rail, agent/mission/activity/team/approval/settings panels and 2D floor map.
 
@@ -75,3 +80,8 @@ Not yet implemented:
 - Human team avatars in the scene.
 - Live API-driven agent state, tasks and activity.
 - Production authentication, 24/7 backend/worker, database and monitoring.
+
+
+## White-first realism update
+
+The current Phase 2 implementation has been updated to use a bright architectural base: warm-white porcelain floor, frosted glass partitions, brushed metal framing, oak worktops, pale command furniture, ergonomic upholstered chairs, ceramic planters, daylight-balanced lighting and a multicolor department system. The three accent theme options now change accent combinations while the core interface and office remain white-first.
