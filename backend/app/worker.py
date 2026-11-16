@@ -285,29 +285,38 @@ def _recover_interrupted_missions() -> None:
     now = utc_now()
     with connect() as connection:
         rows = connection.execute(
-            "SELECT id, agent_id, title FROM tasks WHERE status='running'"
+            """SELECT t.id, t.agent_id, t.title, t.cancel_requested,
+            o.cancel_requested AS parent_cancelled
+            FROM tasks t LEFT JOIN orchestrations o ON o.id=t.orchestration_id
+            WHERE t.status='running'"""
         ).fetchall()
         for row in rows:
+            was_cancelled = bool(row["cancel_requested"] or row["parent_cancelled"])
+            if was_cancelled:
+                connection.execute(
+                    """UPDATE tasks SET status='cancelled', cancel_requested=0,
+                    error='Cancelled before worker restart', updated_at=?, completed_at=?
+                    WHERE id=?""",
+                    (now, now, row["id"]),
+                )
+                event_type = "mission_cancelled"
+                message = "Worker restarted after a cancellation request; mission was marked cancelled."
+            else:
+                connection.execute(
+                    """UPDATE tasks SET status='queued', progress=0, cancel_requested=0,
+                    started_at=NULL, updated_at=?, error=NULL WHERE id=?""",
+                    (now, row["id"]),
+                )
+                event_type = "worker_recovered"
+                message = "Worker restarted; the unfinished mission was safely returned to the queue."
             connection.execute(
-                """UPDATE tasks SET status='queued', progress=0, cancel_requested=0,
-                started_at=NULL, updated_at=?, error=NULL WHERE id=?""",
-                (now, row["id"]),
-            )
-            connection.execute(
-                """UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'queued' END,
+                """UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END,
                 current_task_id=NULL, updated_at=? WHERE id=? AND current_task_id=?""",
                 (now, row["agent_id"], row["id"]),
             )
-            add_event(
-                connection,
-                row["agent_id"],
-                row["id"],
-                "worker_recovered",
-                "Worker restarted; the unfinished mission was safely returned to the queue.",
-            )
+            add_event(connection, row["agent_id"], row["id"], event_type, message)
         connection.commit()
     recover_orchestrations()
-
 
 async def _keep_heartbeat_fresh() -> None:
     while True:
