@@ -81,8 +81,8 @@ def _match_specialist_header(line: str) -> tuple[str, str] | None:
 
 
 def _strip_internal_thinking(text: str) -> str:
-    cleaned = re.sub(r"<think\\b[^>]*>.*?</think\\s*>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    cleaned = re.sub(r"<think\\b[^>]*>.*$", "", cleaned, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r"<think\b[^>]*>.*?</think\s*>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r"<think\b[^>]*>.*$", "", cleaned, flags=re.IGNORECASE | re.DOTALL)
     return cleaned.strip()
 
 
@@ -606,14 +606,14 @@ async def _synthesize(
         "are writing it."
     )
     user = (
-        f"FOUNDER REQUEST: {request['title']}\\n\\n"
-        f"DETAILS: {request['instructions']}\\n\\n"
-        f"CEO PLAN: {request.get('plan_json') or ''}\\n\\n"
-        f"EXPLICITLY REQUESTED SPECIALISTS: {json.dumps(expected_ids)}\\n"
-        f"ACTUAL SPECIALIST RESULTS: {json.dumps(sorted(returned_ids))}\\n"
-        f"MISSING REQUESTED SPECIALISTS: {json.dumps(missing_ids)}\\n"
-        f"INCOMPLETE SPECIALISTS: {json.dumps(incomplete_ids)}\\n\\n"
-        f"SPECIALIST RESULTS:\\n{json.dumps(results, ensure_ascii=False)}\\n\\n"
+        f"FOUNDER REQUEST: {request['title']}\n\n"
+        f"DETAILS: {request['instructions']}\n\n"
+        f"CEO PLAN: {request.get('plan_json') or ''}\n\n"
+        f"EXPLICITLY REQUESTED SPECIALISTS: {json.dumps(expected_ids)}\n"
+        f"ACTUAL SPECIALIST RESULTS: {json.dumps(sorted(returned_ids))}\n"
+        f"MISSING REQUESTED SPECIALISTS: {json.dumps(missing_ids)}\n"
+        f"INCOMPLETE SPECIALISTS: {json.dumps(incomplete_ids)}\n\n"
+        f"SPECIALIST RESULTS:\n{json.dumps(results, ensure_ascii=False)}\n\n"
         "Report the exact number of specialists who returned results. Do not imply that missing work was done. "
         "Return a founder-facing report with executive summary, specialist findings, consolidated "
         "recommendations, unresolved gaps and prioritised next actions."
