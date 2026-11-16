@@ -5,11 +5,12 @@ from datetime import datetime, timezone
 from typing import Literal
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .db import add_event, agent_to_dict, connect, create_task, event_to_dict, init_db, set_runtime_value, task_to_dict, utc_now
+from .workspace import WorkspaceError, list_workspace_files, read_workspace_file, search_workspace, workspace_summary
 
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
@@ -142,6 +143,40 @@ def create_app() -> FastAPI:
                 "execution_mode": "local-ollama",
             },
         }
+
+    @app.get("/api/v1/workspace/summary")
+    def get_workspace_summary() -> dict:
+        try:
+            return workspace_summary()
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/v1/workspace/files")
+    def get_workspace_files(limit: int = Query(default=200, ge=1, le=500)) -> dict:
+        try:
+            return {"files": list_workspace_files(limit=limit)}
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/v1/workspace/read")
+    def get_workspace_file(
+        path: str = Query(min_length=1, max_length=300),
+        max_chars: int = Query(default=12000, ge=500, le=24000),
+    ) -> dict:
+        try:
+            return {"path": path, "content": read_workspace_file(path, max_chars=max_chars)}
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/v1/workspace/search")
+    def search_workspace_files(
+        q: str = Query(min_length=2, max_length=300),
+        limit: int = Query(default=12, ge=1, le=30),
+    ) -> dict:
+        try:
+            return {"results": search_workspace(q, max_results=limit)}
+        except WorkspaceError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/api/v1/agents/{agent_id}/events")
     def agent_events(agent_id: str, limit: int = 50) -> dict:
