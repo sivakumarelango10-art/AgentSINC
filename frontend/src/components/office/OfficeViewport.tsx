@@ -26,7 +26,7 @@ export default function OfficeViewport({
     <Canvas
       shadows
       dpr={[1, 1.5]}
-      camera={{ position: [16, 14.5, 18.5], fov: 39, near: 0.1, far: 140 }}
+      camera={{ position: [16, 11.5, 20], fov: 37, near: 0.1, far: 140 }}
       gl={{
         antialias: true,
         alpha: false,
