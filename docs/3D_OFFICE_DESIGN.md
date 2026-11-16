@@ -81,12 +81,14 @@ Implemented in the Phase 2 branch:
 - Selectable agent characters with natural skin/hair tones and department-colored clothing.
 - Room-focused orbit targets.
 - Floating workspace UI, panel rail, agent/mission/activity/team/approval/settings panels and 2D floor map.
+- Local API-driven agent state, task names, task progress and mission status in the scene and workstation monitors.
+- Individual specialist reports that can be expanded from the CEO orchestration card.
 
 Not yet implemented:
 - Persistent camera presets and movement animations between rooms.
 - Human team avatars in the scene.
-- Live API-driven agent state, tasks and activity.
-- Production authentication, 24/7 backend/worker, database and monitoring.
+- Production authentication, managed multi-user database, guaranteed 24/7 hosting and production monitoring.
+- Isolated code execution and file-write tools with explicit human approval.
 
 
 ## White-first realism update
