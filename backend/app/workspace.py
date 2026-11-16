@@ -232,14 +232,39 @@ def build_workspace_context(query: str) -> WorkspaceContext:
     root = workspace_root()
     files = list(iter_workspace_files())
     by_path = {relative: path for relative, path in files}
-    selected: list[str] = []
+    query_lower = query.lower()
 
-    preferred = [
-        "README.md", "docs/PHASES.md", "docs/ARCHITECTURE.md",
-        "docs/3D_OFFICE_DESIGN.md", "backend/README.md", "frontend/README.md",
-        "package.json", "frontend/package.json", "backend/requirements.txt",
-        "backend/app/main.py", "backend/app/db.py", "backend/app/worker.py",
-    ]
+    preferred = ["README.md", "docs/PHASES.md"]
+    architecture_query = any(
+        word in query_lower
+        for word in ("architecture", "roadmap", "backend", "api", "worker", "orchestration", "production")
+    )
+    frontend_query = any(
+        word in query_lower
+        for word in ("frontend", "front end", "ui", "interface", "next.js", "react", "design", "3d")
+    )
+
+    if architecture_query:
+        preferred.extend([
+            "backend/README.md",
+            "backend/requirements.txt",
+            "frontend/package.json",
+            "backend/app/main.py",
+            "backend/app/db.py",
+            "backend/app/worker.py",
+        ])
+    if frontend_query:
+        preferred.extend([
+            "frontend/README.md",
+            "frontend/package.json",
+            "frontend/src/components/office/types.ts",
+            "frontend/src/components/office/OfficeExperience.tsx",
+            "frontend/src/components/office/scene/AgentSincScene.tsx",
+        ])
+    if "3d" in query_lower or "design" in query_lower:
+        preferred.append("docs/3D_OFFICE_DESIGN.md")
+
+    selected: list[str] = []
     for relative in preferred:
         if relative in by_path and relative not in selected:
             selected.append(relative)
@@ -248,6 +273,22 @@ def build_workspace_context(query: str) -> WorkspaceContext:
         relative = str(item["path"])
         if relative in by_path and relative not in selected:
             selected.append(relative)
+
+    path_budgets = {
+        "README.md": 2_500,
+        "docs/PHASES.md": 2_500,
+        "backend/README.md": 1_700,
+        "backend/requirements.txt": 1_000,
+        "frontend/README.md": 1_700,
+        "frontend/package.json": 1_500,
+        "backend/app/main.py": 4_000,
+        "backend/app/db.py": 3_000,
+        "backend/app/worker.py": 4_000,
+        "frontend/src/components/office/types.ts": 2_000,
+        "frontend/src/components/office/OfficeExperience.tsx": 4_000,
+        "frontend/src/components/office/scene/AgentSincScene.tsx": 4_000,
+        "docs/3D_OFFICE_DESIGN.md": 2_000,
+    }
 
     sections: list[str] = []
     included: list[str] = []
@@ -259,9 +300,7 @@ def build_workspace_context(query: str) -> WorkspaceContext:
             content = by_path[relative].read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        per_file_limit = 5_000 if relative.endswith((".md", ".json", ".yml", ".yaml", ".toml", ".txt")) else 3_500
-        if relative in {"backend/app/main.py", "backend/app/worker.py", "backend/app/db.py"}:
-            per_file_limit = 6_000
+        per_file_limit = path_budgets.get(relative, 2_500)
         content = redact_sensitive_text(content[:min(per_file_limit, remaining - 300)])
         if not content.strip():
             continue
@@ -281,7 +320,6 @@ def build_workspace_context(query: str) -> WorkspaceContext:
             + "\n\n".join(sections)
         )
     return WorkspaceContext(text=text, files=included)
-
 
 def workspace_summary() -> dict[str, object]:
     root = workspace_root()
