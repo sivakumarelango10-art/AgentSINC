@@ -40,6 +40,14 @@ export type RuntimeStatus = {
   execution_mode: string;
 };
 
+export type WorkspaceSummary = {
+  available: boolean;
+  root_name: string;
+  file_count: number;
+  read_only: boolean;
+  sensitive_files_excluded: boolean;
+};
+
 export type RuntimeOverview = {
   agents: import("../components/office/types").OfficeAgent[];
   tasks: AgentTask[];
@@ -73,6 +81,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function getOverview(): Promise<RuntimeOverview> {
   return request<RuntimeOverview>("/api/v1/overview");
+}
+
+export function getWorkspaceSummary(): Promise<WorkspaceSummary> {
+  return request<WorkspaceSummary>("/api/v1/workspace/summary");
 }
 
 export function createMission(input: {
