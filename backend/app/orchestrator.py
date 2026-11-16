@@ -63,8 +63,10 @@ async def _chat(
 
 def _json_object(content: str) -> dict[str, Any]:
     cleaned = content.strip()
-    if cleaned.startswith(""):
+    if cleaned.startswith(chr(96) * 3):
         cleaned = cleaned.split("\n", 1)[-1]
+        if cleaned.endswith(chr(96) * 3):
+            cleaned = cleaned[:-3]
     try:
         value = json.loads(cleaned)
     except json.JSONDecodeError:
