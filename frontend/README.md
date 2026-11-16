@@ -1,6 +1,6 @@
 # AgentSINC web application
 
-AgentSINC is an original SINC AI office. The Phase 2 visual prototype uses Next.js App Router, React 19, TypeScript, Tailwind CSS 4 and React Three Fiber v9.
+AgentSINC is an original SINC AI office. The frontend uses Next.js App Router, React 19, TypeScript, Tailwind CSS 4 and React Three Fiber v9.
 
 ## Requirements
 
@@ -11,34 +11,29 @@ AgentSINC is an original SINC AI office. The Phase 2 visual prototype uses Next.
 
 From this directory:
 
-```powershell
-npm install
-npm run dev
-```
+    npm install
+    npm run dev
 
-Open `http://localhost:3000`.
+Open http://localhost:3000.
 
-For production build validation:
+For frontend validation:
 
-```powershell
-npm run typecheck
-npm run build
-```
+    npm run typecheck
+    npm run build
 
-## Current Phase 2 experience
+## Runtime connection
 
-- Full-window, immersive original SINC 3D headquarters. The office is the main workspace, not a small dashboard widget.
-- Command Hub, Development Studio, Design Studio, Research Library, Quality Lab, Collaboration Lounge and SINC identity wall.
-- Original procedural office geometry, desks, glass partitions, lighting, plants, room signage and stylized selectable AI characters.
-- Room navigation that changes the OrbitControls target.
-- Floating UI panels for agents, missions/tasks, activity, people, approvals and studio settings.
-- Three switchable brand palettes.
-- 2D floor-map mode with return-to-3D control.
+The browser connects to the local AgentSINC API at http://127.0.0.1:8000 by default. Start the FastAPI service and the separate Python worker, then keep Ollama running to enable real local missions.
 
-All displayed agent/task/activity details are sample data. Authentication, PostgreSQL, API, AI providers and the background worker are not connected yet.
+Runtime setup, Windows commands, and zero-cost/24-hour limitations are documented in ../backend/README.md.
 
-## Local development notes
+## Current experience
 
-- Keep npm cache and temporary files outside the system drive when needed, for example with `npm config set cache E:\\npm-cache --global`.
-- The 3D environment is lazy-loaded, with a non-WebGL floor map alternative.
-- Do not add provider credentials to frontend code or browser environment variables.
+- Full-window, white-first SINC headquarters with original procedural architecture and multi-color department identities.
+- Selectable human-proportioned 3D specialist agents with agent detail and timeline panel.
+- Room navigation, 2D floor map, and workspace navigation.
+- Persistent mission creation, queue, progress, result, cancellation and retry through the local API.
+- Agent pause/resume controls and per-agent history.
+- Runtime health display for API, worker heartbeat, local Ollama connection and installed model selection.
+
+When the backend is not running, the UI explicitly shows runtime disconnected and does not display fake active work. The API and worker are local-only in this phase. File-system edits, browser automation, external integrations and deployment actions remain disabled until sandboxing and approval controls are implemented.
