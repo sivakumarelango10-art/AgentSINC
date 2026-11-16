@@ -613,18 +613,39 @@ function AgentAvatar({
   onSelect: (id: string) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  const torsoRef = useRef<THREE.Group>(null);
+  const headRef = useRef<THREE.Group>(null);
+  const leftArmRef = useRef<THREE.Group>(null);
+  const rightArmRef = useRef<THREE.Group>(null);
   const haloRef = useRef<THREE.Mesh>(null);
   const bobOffset = useMemo(() => agent.position[0] * 0.13, [agent.position]);
+  const skinTone = agent.id === "researcher" ? "#B97852" : agent.id === "designer" ? "#D69B76" : agent.id === "tester" ? "#C58C69" : "#D29A75";
+  const hairTone = agent.id === "designer" ? "#302322" : agent.id === "researcher" ? "#241D19" : "#302A28";
+  const wearsGlasses = agent.id === "tester" || agent.id === "researcher";
+  const isPaused = agent.status === "paused";
 
   useFrame(({ clock }) => {
-    if (!groupRef.current) return;
     const time = clock.elapsedTime;
-    groupRef.current.position.y = Math.sin(time * 2.1 + bobOffset) * 0.025;
-    if (agent.status === "collaborating") {
-      groupRef.current.rotation.y = Math.sin(time * 0.45) * 0.16;
+    const breathing = Math.sin(time * 1.65 + bobOffset) * 0.012;
+    if (groupRef.current) groupRef.current.position.y = Math.sin(time * 1.8 + bobOffset) * 0.012;
+    if (torsoRef.current) torsoRef.current.position.y = 1.02 + breathing;
+    if (headRef.current) {
+      const thinkingTilt = agent.status === "thinking" ? 0.09 : 0;
+      headRef.current.rotation.z = thinkingTilt + Math.sin(time * 0.7 + bobOffset) * 0.012;
+      headRef.current.rotation.y = agent.status === "collaborating" ? Math.sin(time * 0.55) * 0.14 : 0;
+    }
+    const workMotion = agent.status === "working" ? Math.sin(time * 3.2 + bobOffset) * 0.045 : 0;
+    const talkMotion = agent.status === "collaborating" ? Math.sin(time * 2.2 + bobOffset) * 0.08 : 0;
+    if (leftArmRef.current) {
+      leftArmRef.current.rotation.x = -0.12 + workMotion - talkMotion;
+      leftArmRef.current.rotation.z = 0.12 + (isPaused ? 0 : talkMotion * 0.35);
+    }
+    if (rightArmRef.current) {
+      rightArmRef.current.rotation.x = -0.12 - workMotion + talkMotion;
+      rightArmRef.current.rotation.z = -0.12 - (isPaused ? 0 : talkMotion * 0.35);
     }
     if (haloRef.current) {
-      const pulse = 1 + Math.sin(time * 2.4 + bobOffset) * 0.05;
+      const pulse = 1 + Math.sin(time * 2.1 + bobOffset) * 0.035;
       haloRef.current.scale.setScalar(selected ? pulse : 1);
     }
   });
@@ -635,49 +656,152 @@ function AgentAvatar({
   };
 
   return (
-    <group position={[agent.position[0], 0, agent.position[2] + 1.1]} onClick={handleSelect} ref={groupRef}>
-      <mesh ref={haloRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
-        <torusGeometry args={[selected ? 0.75 : 0.55, selected ? 0.045 : 0.025, 8, 48]} />
-        <meshBasicMaterial color={agent.color} transparent opacity={selected ? 0.88 : 0.38} />
+    <group
+      position={[agent.position[0], 0, agent.position[2] + 1.1]}
+      onClick={handleSelect}
+      ref={groupRef}
+    >
+      <mesh ref={haloRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.075, 0]}>
+        <torusGeometry args={[selected ? 0.72 : 0.56, selected ? 0.038 : 0.022, 10, 56]} />
+        <meshBasicMaterial color={agent.color} transparent opacity={selected ? 0.78 : 0.28} />
       </mesh>
-      <mesh castShadow position={[0, 0.91, 0]}>
-        <capsuleGeometry args={[0.25, 0.5, 6, 12]} />
-        <meshPhysicalMaterial color={agent.color} roughness={0.74} metalness={0.01} clearcoat={0.08} />
-      </mesh>
-      <mesh castShadow position={[0, 1.53, 0]}>
-        <sphereGeometry args={[0.235, 22, 22]} />
-        <meshStandardMaterial color="#D9A982" roughness={0.88} />
-      </mesh>
-      <mesh castShadow position={[0, 1.67, -0.04]}>
-        <sphereGeometry args={[0.24, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.56]} />
-        <meshStandardMaterial color="#49372F" roughness={0.94} />
-      </mesh>
-      {[-0.09, 0.09].map((x) => (
-        <mesh key={x} position={[x, 1.54, 0.215]}>
-          <sphereGeometry args={[0.025, 8, 8]} />
-          <meshBasicMaterial color="#253247" />
+
+      <group ref={torsoRef} position={[0, 1.02, 0]}>
+        <mesh castShadow receiveShadow>
+          <capsuleGeometry args={[0.285, 0.43, 8, 18]} />
+          <meshPhysicalMaterial color={agent.color} roughness={0.78} metalness={0.015} clearcoat={0.08} />
         </mesh>
+        <mesh position={[0, 0.05, 0.246]}>
+          <boxGeometry args={[0.16, 0.43, 0.018]} />
+          <meshPhysicalMaterial color="#F8FAFC" roughness={0.72} />
+        </mesh>
+        <mesh position={[0, 0.27, 0.235]} rotation={[0.12, 0, 0]}>
+          <coneGeometry args={[0.105, 0.19, 4]} />
+          <meshStandardMaterial color="#F7F8FA" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, -0.28, 0]}>
+          <boxGeometry args={[0.42, 0.055, 0.28]} />
+          <meshStandardMaterial color="#27364C" roughness={0.68} />
+        </mesh>
+        {agent.id === "ceo" ? (
+          <mesh position={[0, 0.02, 0.268]}>
+            <coneGeometry args={[0.035, 0.22, 4]} />
+            <meshStandardMaterial color="#7C3AED" roughness={0.62} />
+          </mesh>
+        ) : null}
+      </group>
+
+      <group ref={headRef} position={[0, 1.73, 0]}>
+        <mesh castShadow>
+          <sphereGeometry args={[0.235, 32, 28]} />
+          <meshPhysicalMaterial color={skinTone} roughness={0.86} metalness={0} sheen={0.16} sheenRoughness={0.75} />
+        </mesh>
+        <mesh position={[0, -0.28, 0]}>
+          <cylinderGeometry args={[0.085, 0.095, 0.2, 16]} />
+          <meshStandardMaterial color={skinTone} roughness={0.86} />
+        </mesh>
+        <mesh position={[0, 0.115, -0.028]} scale={[1.04, 0.57, 1.03]}>
+          <sphereGeometry args={[0.242, 26, 18, 0, Math.PI * 2, 0, 1.28]} />
+          <meshStandardMaterial color={hairTone} roughness={0.92} />
+        </mesh>
+        <mesh position={[0, -0.015, -0.18]} scale={[0.9, 0.9, 0.48]}>
+          <sphereGeometry args={[0.22, 18, 16]} />
+          <meshStandardMaterial color={hairTone} roughness={0.95} />
+        </mesh>
+        {[-1, 1].map((side) => (
+          <group key={side}>
+            <mesh position={[side * 0.235, -0.015, 0]}>
+              <sphereGeometry args={[0.055, 14, 14]} />
+              <meshPhysicalMaterial color={skinTone} roughness={0.86} />
+            </mesh>
+            <mesh position={[side * 0.082, 0.025, 0.206]}>
+              <sphereGeometry args={[0.045, 16, 14]} />
+              <meshBasicMaterial color="#FBFCFE" />
+            </mesh>
+            <mesh position={[side * 0.082, 0.025, 0.244]}>
+              <sphereGeometry args={[0.021, 12, 12]} />
+              <meshBasicMaterial color="#293243" />
+            </mesh>
+            <mesh position={[side * 0.082, 0.083, 0.205]} rotation={[0, 0, side * -0.08]}>
+              <boxGeometry args={[0.082, 0.018, 0.018]} />
+              <meshStandardMaterial color={hairTone} roughness={0.9} />
+            </mesh>
+          </group>
+        ))}
+        <mesh position={[0, -0.045, 0.241]} rotation={[Math.PI / 2, 0, 0]}>
+          <coneGeometry args={[0.038, 0.088, 9]} />
+          <meshPhysicalMaterial color={skinTone} roughness={0.82} />
+        </mesh>
+        <mesh position={[0, -0.135, 0.212]}>
+          <boxGeometry args={[0.07, 0.012, 0.012]} />
+          <meshStandardMaterial color="#8B514A" roughness={0.88} />
+        </mesh>
+        {wearsGlasses ? (
+          <group>
+            {[-0.082, 0.082].map((side) => (
+              <mesh key={side} position={[side, 0.025, 0.25]}>
+                <torusGeometry args={[0.049, 0.008, 6, 24]} />
+                <meshStandardMaterial color="#475569" metalness={0.8} roughness={0.25} />
+              </mesh>
+            ))}
+            <mesh position={[0, 0.025, 0.25]}>
+              <boxGeometry args={[0.035, 0.012, 0.012]} />
+              <meshStandardMaterial color="#475569" metalness={0.8} roughness={0.25} />
+            </mesh>
+          </group>
+        ) : null}
+      </group>
+
+      <mesh castShadow position={[-0.13, 0.43, 0]}>
+        <capsuleGeometry args={[0.088, 0.47, 6, 12]} />
+        <meshPhysicalMaterial color="#45536A" roughness={0.86} />
+      </mesh>
+      <mesh castShadow position={[0.13, 0.43, 0]}>
+        <capsuleGeometry args={[0.088, 0.47, 6, 12]} />
+        <meshPhysicalMaterial color="#45536A" roughness={0.86} />
+      </mesh>
+      {[-0.14, 0.14].map((side) => (
+        <group key={side}>
+          <mesh castShadow position={[side, 0.105, 0.055]} scale={[1, 0.62, 1.52]}>
+            <sphereGeometry args={[0.115, 18, 14]} />
+            <meshPhysicalMaterial color="#253247" roughness={0.55} />
+          </mesh>
+        </group>
       ))}
-      <mesh castShadow position={[-0.32, 0.95, 0]} rotation={[0, 0, 0.13]}>
-        <capsuleGeometry args={[0.075, 0.33, 4, 8]} />
-        <meshStandardMaterial color={agent.color} roughness={0.5} />
-      </mesh>
-      <mesh castShadow position={[0.32, 0.95, 0]} rotation={[0, 0, -0.13]}>
-        <capsuleGeometry args={[0.075, 0.33, 4, 8]} />
-        <meshStandardMaterial color={agent.color} roughness={0.5} />
-      </mesh>
-      <mesh castShadow position={[-0.13, 0.32, 0]}>
-        <capsuleGeometry args={[0.075, 0.36, 4, 8]} />
-        <meshStandardMaterial color="#64748B" roughness={0.82} />
-      </mesh>
-      <mesh castShadow position={[0.13, 0.32, 0]}>
-        <capsuleGeometry args={[0.075, 0.36, 4, 8]} />
-        <meshStandardMaterial color="#29364D" roughness={0.7} />
-      </mesh>
+
+      <group ref={leftArmRef} position={[-0.32, 1.27, 0]}>
+        <mesh castShadow position={[0, -0.17, 0]}>
+          <capsuleGeometry args={[0.115, 0.32, 6, 12]} />
+          <meshPhysicalMaterial color={agent.color} roughness={0.82} />
+        </mesh>
+        <mesh castShadow position={[0, -0.48, 0.015]}>
+          <capsuleGeometry args={[0.078, 0.28, 6, 12]} />
+          <meshPhysicalMaterial color={skinTone} roughness={0.86} />
+        </mesh>
+        <mesh castShadow position={[0, -0.66, 0.035]}>
+          <sphereGeometry args={[0.082, 16, 14]} />
+          <meshPhysicalMaterial color={skinTone} roughness={0.86} />
+        </mesh>
+      </group>
+      <group ref={rightArmRef} position={[0.32, 1.27, 0]}>
+        <mesh castShadow position={[0, -0.17, 0]}>
+          <capsuleGeometry args={[0.115, 0.32, 6, 12]} />
+          <meshPhysicalMaterial color={agent.color} roughness={0.82} />
+        </mesh>
+        <mesh castShadow position={[0, -0.48, 0.015]}>
+          <capsuleGeometry args={[0.078, 0.28, 6, 12]} />
+          <meshPhysicalMaterial color={skinTone} roughness={0.86} />
+        </mesh>
+        <mesh castShadow position={[0, -0.66, 0.035]}>
+          <sphereGeometry args={[0.082, 16, 14]} />
+          <meshPhysicalMaterial color={skinTone} roughness={0.86} />
+        </mesh>
+      </group>
+
       <Html position={[0, 2.18, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div className={selected ? "scene-agent-tag selected" : "scene-agent-tag"} style={{ "--agent-color": agent.color } as React.CSSProperties}>
           <span>{agent.name}</span>
-          <small>{agent.role}</small>
+          <small>{STATUS_LABELS[agent.status]}</small>
         </div>
       </Html>
     </group>
