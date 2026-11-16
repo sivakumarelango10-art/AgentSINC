@@ -146,6 +146,7 @@ export function OfficeExperience() {
             onSelect={setSelectedAgentId}
             focusedRoom={focusedRoom}
             onFocusRoom={setFocusedRoom}
+            onReturnTo3D={() => setShowMap(false)}
           />
         ) : (
           <OfficeViewport
@@ -406,12 +407,14 @@ function OfficeMap2D({
   onSelect,
   focusedRoom,
   onFocusRoom,
+  onReturnTo3D,
 }: {
   agents: OfficeAgent[];
   selectedAgentId: string;
   onSelect: (id: string) => void;
   focusedRoom: RoomKey;
   onFocusRoom: (room: RoomKey) => void;
+  onReturnTo3D: () => void;
 }) {
   const positions = [
     { id: "command", x: "50%", y: "22%", label: "COMMAND HUB" },
