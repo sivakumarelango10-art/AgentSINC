@@ -445,7 +445,7 @@ function OfficeMap2D({
         );
       })}
       <div className="map-caption">FLOOR 01 · SELECT A DEPARTMENT TO EXPLORE</div>
-      <button className="map-return-3d" onClick={() => onFocusRoom(focusedRoom)}>RETURN TO 3D ↗</button>
+      <button className="map-return-3d" onClick={onReturnTo3D}>RETURN TO 3D ↗</button>
     </div>
   );
 }
