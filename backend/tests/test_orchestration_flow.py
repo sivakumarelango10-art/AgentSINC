@@ -6,7 +6,8 @@ import json
 import httpx
 
 from app.db import connect, create_orchestration, get_orchestration_detail, init_db
-from app.orchestrator import CEO_PLAN_SCHEMA, _claim_planning, _claim_synthesis, _plan, _synthesize, _validate_plan
+from app import orchestrator
+from app.orchestrator import CEO_PLAN_SCHEMA, _claim_planning, _claim_synthesis, _explicit_specialist_plan, _plan, _synthesize, _validate_plan
 
 
 def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypatch) -> None:
@@ -146,3 +147,59 @@ def test_ceo_plan_still_rejects_empty_or_invalid_delegations() -> None:
         assert "specialist missions" in str(exc)
     else:
         raise AssertionError("An empty specialist plan must be rejected.")
+
+
+
+def test_explicit_founder_specialist_sections_are_preserved_without_llm_replanning(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENTSINC_DB_PATH", str(tmp_path / "explicit-specialists.sqlite3"))
+    init_db()
+    instructions = """Coordinate all four specialist agents for a production-readiness audit.
+
+1. **DEVELOPER AGENT**
+Review backend architecture, FastAPI endpoints, SQLite persistence, Ollama worker and task lifecycle.
+
+2. **DESIGNER AGENT**
+Review the Next.js frontend, 3D office, agent interactions and responsive user experience.
+
+3. **RESEARCH AGENT**
+Review project documentation, architecture decisions, dependencies and production requirements.
+
+4. **QA AGENT**
+Review automated tests, error handling, runtime reliability, security boundaries and missing test coverage.
+"""
+    request = create_orchestration("AgentSINC Production Readiness Audit", instructions)
+
+    plan = _explicit_specialist_plan(request)
+    assert plan is not None
+    assert [task["agent_id"] for task in plan["tasks"]] == [
+        "developer", "designer", "researcher", "tester"
+    ]
+    assert "FastAPI endpoints" in plan["tasks"][0]["instructions"]
+    assert "3D office" in plan["tasks"][1]["instructions"]
+    assert "production requirements" in plan["tasks"][2]["instructions"]
+    assert "security boundaries" in plan["tasks"][3]["instructions"]
+
+    def no_workspace_planner_call(_query: str):
+        raise AssertionError("Explicit assignments must not be reinterpreted by the model planner.")
+
+    monkeypatch.setattr(orchestrator, "build_workspace_context", no_workspace_planner_call)
+
+    async def handler(_http_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("The explicit assignment path must not call Ollama to choose specialists.")
+
+    async def run() -> None:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            claimed = _claim_planning()
+            assert claimed is not None
+            await _plan(client, "http://ollama.test", 10, "qwen3:4b", claimed)
+
+    asyncio.run(run())
+
+    detail = get_orchestration_detail(request["id"])
+    assert detail is not None
+    assert detail["status"] == "running"
+    assert detail["stage"] == "executing"
+    assert [task["agent_id"] for task in detail["tasks"]] == [
+        "developer", "designer", "researcher", "tester"
+    ]
+    assert all(task["status"] == "queued" for task in detail["tasks"])
