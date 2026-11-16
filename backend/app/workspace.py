@@ -21,7 +21,7 @@ IGNORED_DIRS = {
     ".git", ".next", ".venv", "venv", "node_modules", "__pycache__",
     ".pytest_cache", ".mypy_cache", ".ruff_cache", "dist", "build",
     "out", ".turbo", ".vercel", "coverage", "playwright-report",
-    "test-results", "site-packages", "vendor",
+    "test-results", "site-packages", "vendor", "data", "storage", "uploads",
 }
 SENSITIVE_NAMES = {".env", ".npmrc", ".pypirc", "id_rsa", "id_ed25519", "credentials.json", "secrets.json"}
 SENSITIVE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".sqlite", ".sqlite3", ".db"}
@@ -147,17 +147,17 @@ def iter_workspace_files(max_files: int = MAX_INDEX_FILES) -> Iterable[tuple[str
     for current, directories, names in os.walk(root, topdown=True, followlinks=False):
         current_path = Path(current)
         relative_dir = current_path.relative_to(root)
-        directories[:] = [
+        directories[:] = sorted([
             name for name in directories
             if name.lower() not in IGNORED_DIRS
             and not (current_path / name).is_symlink()
-            and not name.startswith(".")
-        ]
+            and (not name.startswith(".") or name == ".github")
+        ])
         if relative_dir.parts and _is_ignored(relative_dir / "placeholder.txt"):
             directories[:] = []
             continue
 
-        for name in names:
+        for name in sorted(names):
             path = current_path / name
             try:
                 relative = path.relative_to(root)
