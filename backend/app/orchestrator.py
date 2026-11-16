@@ -69,16 +69,15 @@ SPECIALIST_TITLES = {
 def _match_specialist_header(line: str) -> tuple[str, str] | None:
     cleaned = re.sub(r"^\s*\d+\s*[.)]\s*", "", line).strip()
     cleaned = re.sub(r"^[-*#]+\s*", "", cleaned).strip()
-    cleaned = cleaned.strip("* ").strip()
+    cleaned = cleaned.replace("**", "").replace("__", "").strip("*# ").strip()
+    heading_only = cleaned.rstrip(":：—- ").strip()
     for agent_id, pattern in SPECIALIST_HEADERS.items():
-        match = pattern.match(cleaned)
-        if match:
+        if pattern.fullmatch(heading_only):
             return agent_id, ""
         inline = re.match(r"^(.*?)(?:\s*[:—-]\s+)(.+)$", cleaned)
-        if inline and pattern.match(inline.group(1).strip("* ").strip()):
+        if inline and pattern.fullmatch(inline.group(1).strip("*# ").strip()):
             return agent_id, inline.group(2).strip()
     return None
-
 
 def _strip_internal_thinking(text: str) -> str:
     cleaned = re.sub(r"<think\b[^>]*>.*?</think\s*>", "", text, flags=re.IGNORECASE | re.DOTALL)
