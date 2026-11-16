@@ -548,7 +548,7 @@ export function OfficeExperience() {
       <footer className="world-footer">
         <div className="footer-brand">AGENTSINC <span>·</span> SINC INTELLIGENCE</div>
         <div className="footer-shortcuts"><kbd>DRAG</kbd> ORBIT <i /> <kbd>SCROLL</kbd> ZOOM <i /> <kbd>CLICK</kbd> TRACK AGENT</div>
-        <div className="footer-version">LOCAL RUNTIME / PHASE 3</div>
+        <div className="footer-version">LOCAL CEO ORCHESTRATION / PHASE 4B</div>
       </footer>
     </main>
   );
