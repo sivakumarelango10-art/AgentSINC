@@ -207,6 +207,10 @@ def create_app() -> FastAPI:
                     "UPDATE orchestrations SET status='cancelled', stage='cancelled', completed_at=?, updated_at=? WHERE id=?",
                     (now, now, orchestration_id),
                 )
+                connection.execute(
+                    "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+                    (now,),
+                )
             add_event(
                 connection, "ceo", None, "orchestration_cancel_requested",
                 "Founder requested cancellation of the CEO orchestration.",
