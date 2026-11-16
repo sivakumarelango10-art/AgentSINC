@@ -10,6 +10,7 @@ type OfficeViewportProps = {
   selectedAgentId: string | null;
   onSelectAgent: (id: string) => void;
   theme: BrandTheme;
+  focusedRoom: string;
 };
 
 export default function OfficeViewport({
@@ -17,21 +18,23 @@ export default function OfficeViewport({
   selectedAgentId,
   onSelectAgent,
   theme,
+  focusedRoom,
 }: OfficeViewportProps) {
   const palette = BRAND_THEMES[theme];
 
   return (
     <Canvas
       shadows
-      dpr={[1, 1.5]}
-      camera={{ position: [13, 13, 16], fov: 42, near: 0.1, far: 100 }}
+      dpr={[1, 1.65]}
+      camera={{ position: [15.5, 15, 18], fov: 38, near: 0.1, far: 120 }}
       gl={{
         antialias: true,
         alpha: false,
         powerPreference: "high-performance",
       }}
       onCreated={({ gl }) => {
-        gl.setClearColor("#080C17", 1);
+        gl.setClearColor("#070B14", 1);
+        gl.toneMappingExposure = 1.05;
       }}
     >
       <Suspense fallback={null}>
@@ -40,6 +43,7 @@ export default function OfficeViewport({
           selectedAgentId={selectedAgentId}
           onSelectAgent={onSelectAgent}
           palette={palette}
+          focusedRoom={focusedRoom}
         />
       </Suspense>
     </Canvas>
