@@ -13,6 +13,10 @@ from .db import add_event, connect, get_runtime_value, set_runtime_value, utc_no
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 POLL_SECONDS = float(os.getenv("AGENTSINC_WORKER_POLL_SECONDS", "2"))
 MODEL_TIMEOUT = float(os.getenv("AGENTSINC_MODEL_TIMEOUT_SECONDS", "900"))
+class MissionCancelled(Exception):
+    """Raised when a founder cancels a running local model response."""
+
+
 SYSTEM_POLICY = (
     "You are an AI specialist working inside AgentSINC, a local-first AI company workspace. "
     "Work only on the mission supplied by the founder. You have no shell, browser, network-search, "
@@ -186,7 +190,7 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
         response.raise_for_status()
         async for line in response.aiter_lines():
             if _cancel_requested(task["id"]):
-                raise asyncio.CancelledError("Founder requested cancellation.")
+                raise MissionCancelled("Founder requested cancellation.")
             if not line:
                 continue
             try:
@@ -204,14 +208,42 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
                 _record_progress(task, progress, f"Local model response is being generated ({generated_length} characters received).")
                 last_progress_event = progress
     if _cancel_requested(task["id"]):
-        raise asyncio.CancelledError("Founder requested cancellation.")
+        raise MissionCancelled("Founder requested cancellation.")
     result = "".join(chunks).strip()
     if not result:
         raise RuntimeError("Ollama returned an empty response.")
     return result
 
 
+def _recover_interrupted_missions() -> None:
+    now = utc_now()
+    with connect() as connection:
+        rows = connection.execute(
+            "SELECT id, agent_id, title FROM tasks WHERE status='running'"
+        ).fetchall()
+        for row in rows:
+            connection.execute(
+                """UPDATE tasks SET status='queued', progress=0, cancel_requested=0,
+                started_at=NULL, updated_at=?, error=NULL WHERE id=?""",
+                (now, row["id"]),
+            )
+            connection.execute(
+                """UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'queued' END,
+                current_task_id=NULL, updated_at=? WHERE id=? AND current_task_id=?""",
+                (now, row["agent_id"], row["id"]),
+            )
+            add_event(
+                connection,
+                row["agent_id"],
+                row["id"],
+                "worker_recovered",
+                "Worker restarted; the unfinished mission was safely returned to the queue.",
+            )
+        connection.commit()
+
+
 async def run_worker() -> None:
+    _recover_interrupted_missions()
     poll = max(0.5, POLL_SECONDS)
     _heartbeat("running")
     print("AgentSINC local worker is running. Waiting for Ollama and queued missions.", flush=True)
@@ -247,7 +279,7 @@ async def run_worker() -> None:
                 else:
                     _finish_task(task, result)
                     print(f'Mission completed: {task["id"]}', flush=True)
-            except asyncio.CancelledError:
+            except MissionCancelled:
                 _cancel_task(task, "Mission cancelled by the founder.")
             except (httpx.HTTPError, RuntimeError, ValueError) as exc:
                 _fail_task(task, f"Local model error: {exc}")
