@@ -301,7 +301,7 @@ function OfficeZone({
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
       </mesh>
       <GlassDivider color={color} width={width} depth={depth} />
-      <Html position={[0, 2.55, -depth / 2 + 0.45]} center distanceFactor={8} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.55, -depth / 2 + 0.45]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div className={focused ? "scene-zone-label focused" : "scene-zone-label"} style={{ "--zone-color": color } as React.CSSProperties}>
           <i />{label}
         </div>
@@ -373,7 +373,7 @@ function WorkDesk({
         <planeGeometry args={[0.98, 0.68]} />
         <meshBasicMaterial color={agent?.status === "working" ? "#D9F7FF" : "#B9D7F2"} />
       </mesh>
-      <Html position={[0, 1.32, -0.545]} center transform distanceFactor={5} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 1.32, -0.545]} center transform distanceFactor={10} style={{ pointerEvents: "none" }}>
         <div className="scene-monitor-ui">
           <div className="scene-monitor-top"><i />SINC · LIVE DESK</div>
           <strong>{agent ? STATUS_LABELS[agent.status].toUpperCase() : "AVAILABLE"}</strong>
@@ -525,7 +525,7 @@ function GlassMeetingRoom({ accent }: { accent: string }) {
           <OfficeChair color={accent} position={[0, 0, 0]} />
         </group>
       ))}
-      <Html position={[0, 2.35, -1.48]} center distanceFactor={8} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.35, -1.48]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div className="scene-room-sign">DISCUSSION ROOM · 04 SEATS</div>
       </Html>
     </group>
@@ -595,7 +595,7 @@ function ConferenceRoom({ accent, secondary }: { accent: string; secondary: stri
         <planeGeometry args={[2.16, 0.86]} />
         <meshBasicMaterial color={accent} />
       </mesh>
-      <Html position={[0, 2.8, -2.24]} center distanceFactor={8} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.8, -2.24]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div className="scene-room-sign">SINC MEETING ROOM · 08 SEATS</div>
       </Html>
     </group>
@@ -914,7 +914,7 @@ function AgentAvatar({
         </mesh>
       </group>
 
-      <Html position={[0, 2.18, 0]} center distanceFactor={8} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.18, 0]} center distanceFactor={15} style={{ pointerEvents: "none" }}>
         <div className={selected ? "scene-agent-tag selected" : "scene-agent-tag"} style={{ "--agent-color": agent.color } as React.CSSProperties}>
           <span>{agent.name}</span>
           <small>{STATUS_LABELS[agent.status]}</small>
