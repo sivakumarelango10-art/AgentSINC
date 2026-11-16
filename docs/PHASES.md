@@ -20,9 +20,11 @@ Acceptance:
 - Production plan excludes sleep-prone free compute for the agent runtime.
 - The Phase 1 pull request is reviewed and merged before implementation begins.
 
-## Phase 2 — Original UI system and 3D office prototype
+## Phase 2 — Original UI system and 3D office prototype (in progress)
 
 **Goal:** build the AgentSINC look and feel, dashboard shell and original interactive office.
+
+Current branch progress: dashboard shell, brand theme switcher, selectable specialist-agent sample data, 2D floor-map fallback and a procedural React Three Fiber scene are now present. API/auth/database integration and production-ready assets remain later work within this phase.
 
 Deliverables:
 - Responsive dashboard, navigation, agent roster and task surfaces.
