@@ -60,6 +60,23 @@ After creating the virtual environment and installing the requirements, run from
 
 It opens separate API and worker PowerShell windows. Keep both open while the local runtime is in use.
 
+## Read-only project workspace
+
+The worker automatically treats the repository root as its workspace (the directory containing `backend/` and `frontend/`). Override it only when needed:
+
+    $env:AGENTSINC_WORKSPACE_ROOT = "E:\\AgentSINC"
+
+Each mission receives a bounded, read-only snapshot of project documentation and relevant source files. The local API also provides:
+
+- `GET /api/v1/workspace/summary`
+- `GET /api/v1/workspace/files`
+- `GET /api/v1/workspace/search?q=...`
+- `GET /api/v1/workspace/read?path=...`
+
+Absolute paths, parent-directory traversal and symbolic links are rejected. Dependency/build folders and sensitive files are excluded. Common credential patterns are redacted before file content is sent to Ollama. See [Workspace security](../docs/WORKSPACE_SECURITY.md).
+
+This is bounded lexical retrieval, not a complete semantic index. It does not grant the model an unrestricted filesystem tool.
+
 ## What works in this phase
 
 - Real, persistent five-agent roster.
@@ -74,7 +91,7 @@ It opens separate API and worker PowerShell windows. Keep both open while the lo
 
 ## Honest capability boundary
 
-The local worker currently asks Ollama to analyse a task and produce a textual deliverable. It has no shell, browser, network research, source-control write, file-edit, deployment, email or payment tools. It must not claim those actions have been completed. Tool execution is intentionally disabled until a separately isolated sandbox, permissions and human approval workflow are implemented.
+The worker can inspect bounded, read-only text context from the configured project workspace and use it to produce evidence-based analysis with relative file citations. It still has no shell, browser, network research, source-control write, file-edit, deployment, email or payment tools. It must not claim those actions have been completed. File modifications and command execution are deferred until a separately isolated sandbox, explicit permissions and human approval workflow are implemented.
 
 ## Zero-cost and 24/7 expectations
 
