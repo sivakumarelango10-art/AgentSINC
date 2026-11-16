@@ -216,6 +216,17 @@ def remember_completed_task(connection: sqlite3.Connection, task: dict[str, Any]
         r"\1=[REDACTED]",
         content,
     )
+    content = re.sub(
+        r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}",
+        "Bearer [REDACTED]",
+        content,
+    )
+    content = re.sub(
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+        "[REDACTED PRIVATE KEY]",
+        content,
+        flags=re.DOTALL,
+    )
     connection.execute(
         """INSERT OR IGNORE INTO agent_memory (id, agent_id, task_id, title, content, created_at)
         VALUES (?, ?, ?, ?, ?, ?)""",
@@ -270,6 +281,8 @@ def create_task(agent_id: str, title: str, instructions: str) -> dict[str, Any]:
         agent = connection.execute("SELECT id, is_paused FROM agents WHERE id = ?", (agent_id,)).fetchone()
         if not agent:
             raise ValueError("Unknown agent.")
+        if agent_id == "team_lead":
+            raise PermissionError("The Team Lead accepts work only through CEO orchestration.")
         if agent["is_paused"]:
             raise PermissionError("This agent is paused. Resume it before assigning a mission.")
         connection.execute(
