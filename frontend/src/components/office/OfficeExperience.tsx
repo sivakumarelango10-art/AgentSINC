@@ -11,13 +11,16 @@ import {
 } from "./types";
 import {
   cancelMission,
+  cancelOrchestration,
   chooseLocalModel,
   controlAgent,
   createMission,
+  createOrchestration,
   getOverview,
   getWorkspaceSummary,
   retryMission,
   type AgentEvent,
+  type AgentOrchestration,
   type AgentTask,
   type RuntimeStatus,
   type WorkspaceSummary,
@@ -113,6 +116,7 @@ export function OfficeExperience() {
   const [theme, setTheme] = useState<BrandTheme>("cyber");
   const [agents, setAgents] = useState<OfficeAgent[]>(INITIAL_AGENTS);
   const [tasks, setTasks] = useState<AgentTask[]>([]);
+  const [orchestrations, setOrchestrations] = useState<AgentOrchestration[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [runtime, setRuntime] = useState<RuntimeStatus>(disconnectedRuntime);
   const [runtimeError, setRuntimeError] = useState("Start the local API and worker to enable real agent work.");
@@ -126,6 +130,7 @@ export function OfficeExperience() {
   const [busyAction, setBusyAction] = useState("");
   const [notice, setNotice] = useState("");
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [expandedOrchestrationId, setExpandedOrchestrationId] = useState<string | null>(null);
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
@@ -134,6 +139,7 @@ export function OfficeExperience() {
   const palette = BRAND_THEMES[theme];
   const panelMeta = panelTitles[activePanel];
   const activeMissionCount = tasks.filter((task) => task.status === "queued" || task.status === "running").length;
+  const activeOrchestrationCount = orchestrations.filter((item) => item.status === "queued" || item.status === "running").length;
   const runningAgentCount = agents.filter((agent) => agent.status === "working" || agent.status === "thinking" || agent.status === "collaborating").length;
   const runtimeReady = runtime.api_connected && runtime.worker_online && runtime.ollama_online;
   const runtimeLabel = !runtime.api_connected
@@ -224,14 +230,22 @@ export function OfficeExperience() {
     setBusyAction("assign");
     setNotice("");
     try {
-      await createMission({
-        agent_id: selectedAgent.id,
-        title: missionTitle.trim(),
-        instructions: missionInstructions.trim(),
-      });
+      if (selectedAgent.id === "ceo") {
+        const response = await createOrchestration({
+          title: missionTitle.trim(),
+          instructions: missionInstructions.trim(),
+        });
+        setNotice(`CEO accepted the request and created orchestration ${response.orchestration.id.slice(0, 8)}.`);
+      } else {
+        await createMission({
+          agent_id: selectedAgent.id,
+          title: missionTitle.trim(),
+          instructions: missionInstructions.trim(),
+        });
+        setNotice("Mission saved to the local queue.");
+      }
       setMissionTitle("");
       setMissionInstructions("");
-      setNotice("Mission saved to the local queue.");
       await refreshOverview();
       setActivePanel("tasks");
     } catch (error) {
@@ -265,6 +279,20 @@ export function OfficeExperience() {
       await refreshOverview();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not cancel the mission.");
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const cancelOrchestrationRequest = async (orchestration: AgentOrchestration) => {
+    setBusyAction(`orchestration-${orchestration.id}`);
+    setNotice("");
+    try {
+      await cancelOrchestration(orchestration.id);
+      setNotice("CEO orchestration cancellation requested.");
+      await refreshOverview();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not cancel the CEO request.");
     } finally {
       setBusyAction("");
     }
@@ -386,7 +414,7 @@ export function OfficeExperience() {
         <div className="world-intro-stats">
           <div><strong>{agents.length.toString().padStart(2, "0")}</strong><span>AI SPECIALISTS</span></div>
           <i />
-          <div><strong>{activeMissionCount.toString().padStart(2, "0")}</strong><span>OPEN MISSIONS</span></div>
+          <div><strong>{(activeMissionCount + activeOrchestrationCount).toString().padStart(2, "0")}</strong><span>OPEN MISSIONS</span></div>
           <i />
           <div><strong>{runningAgentCount.toString().padStart(2, "0")}</strong><span>ACTIVE AGENTS</span></div>
         </div>
@@ -463,6 +491,10 @@ export function OfficeExperience() {
               onExpand={setExpandedTaskId}
               onCancel={cancelTask}
               onRetry={retryTask}
+              orchestrations={orchestrations}
+              expandedOrchestrationId={expandedOrchestrationId}
+              onExpandOrchestration={setExpandedOrchestrationId}
+              onCancelOrchestration={cancelOrchestrationRequest}
               busyAction={busyAction}
               onNewMission={() => {
                 setActivePanel("agents");
@@ -583,13 +615,13 @@ function AgentPanel({
       </div>
 
       <form className="mission-form" onSubmit={onAssign}>
-        <div className="panel-section-label">ASSIGN A NEW MISSION <span>LOCAL AI</span></div>
+        <div className="panel-section-label">{selectedAgent.id === "ceo" ? "SEND REQUEST TO CEO" : "ASSIGN A NEW MISSION"} <span>LOCAL AI</span></div>
         <label htmlFor="mission-title">Mission title</label>
         <input
           id="mission-title"
           value={missionTitle}
           onChange={(event) => setMissionTitle(event.target.value)}
-          placeholder={`Give ${selectedAgent.name} a task`}
+          placeholder={selectedAgent.id === "ceo" ? "Describe the outcome you want the CEO to coordinate" : `Give ${selectedAgent.name} a task`}
           minLength={3}
           maxLength={120}
           required
@@ -601,16 +633,16 @@ function AgentPanel({
           onChange={(event) => setMissionInstructions(event.target.value)}
           placeholder="Describe the outcome, context and constraints…"
           rows={4}
-          minLength={10}
+          minLength={selectedAgent.id === "ceo" ? 20 : 10}
           maxLength={12000}
           required
         />
         <button className="runtime-action primary full" type="submit" disabled={!runtime.api_connected || busyAction === "assign" || isPaused}>
-          {busyAction === "assign" ? "Adding to queue…" : "Assign mission to agent"}
+          {busyAction === "assign" ? "Submitting…" : selectedAgent.id === "ceo" ? "Send request to CEO" : "Assign mission to agent"}
         </button>
         {!runtime.api_connected ? <small className="form-hint">Start the local API to enable assignment.</small> : null}
         {runtime.api_connected && (!runtime.worker_online || !runtime.ollama_online) ? <small className="form-hint">Mission can queue now; start Ollama and the worker to process it.</small> : null}
-        <small className="form-hint">The local model returns analysis and text deliverables. It cannot edit files or use external tools yet.</small>
+        <small className="form-hint">{selectedAgent.id === "ceo" ? "CEO plans the request, delegates specialist missions, waits for their reports and prepares one consolidated response." : "The local model returns analysis and text deliverables. It cannot edit files or use external tools yet."}</small>
       </form>
 
       <div className="panel-section-label">AGENT TIMELINE <span>{events.length.toString().padStart(2, "0")}</span></div>
@@ -650,6 +682,10 @@ function MissionPanel({
   onExpand,
   onCancel,
   onRetry,
+  orchestrations,
+  expandedOrchestrationId,
+  onExpandOrchestration,
+  onCancelOrchestration,
   busyAction,
   onNewMission,
 }: {
@@ -659,6 +695,10 @@ function MissionPanel({
   onExpand: (id: string | null) => void;
   onCancel: (task: AgentTask) => void;
   onRetry: (task: AgentTask) => void;
+  orchestrations: AgentOrchestration[];
+  expandedOrchestrationId: string | null;
+  onExpandOrchestration: (id: string | null) => void;
+  onCancelOrchestration: (orchestration: AgentOrchestration) => void;
   busyAction: string;
   onNewMission: () => void;
 }) {
@@ -666,6 +706,58 @@ function MissionPanel({
   return (
     <div className="panel-content mission-list">
       <button className="runtime-action primary full" onClick={onNewMission}>+ Assign a mission</button>
+      {orchestrations.length ? (
+        <>
+          <div className="panel-section-label">CEO ORCHESTRATIONS <span>{orchestrations.length.toString().padStart(2, "0")}</span></div>
+          {orchestrations.map((item) => {
+            const active = item.status === "queued" || item.status === "running";
+            const expanded = expandedOrchestrationId === item.id;
+            return (
+              <article className="mission-card" key={item.id}>
+                <div className="mission-topline">
+                  <span>CEO · {item.id.slice(0, 8).toUpperCase()}</span>
+                  <span className={`mission-status status-${item.status === "running" ? "running" : item.status}`}>{item.stage}</span>
+                </div>
+                <h3>{item.title}</h3>
+                <p>{item.tasks.length} specialist missions · {formatTime(item.created_at)}</p>
+                {item.plan?.summary ? <p>{item.plan.summary}</p> : null}
+                <div className="mission-progress-copy"><span>Workflow progress</span><strong>{item.progress}%</strong></div>
+                <div className="mission-progress"><i style={{ width: `${item.progress}%` }} /></div>
+                {item.tasks.length ? (
+                  <div className="orchestration-children">
+                    {item.tasks.map((child) => (
+                      <div className="orchestration-child" key={child.id}>
+                        <span>{agentNames.get(child.agent_id) ?? child.agent_id}</span>
+                        <small>{child.title}</small>
+                        <b className={`mission-status status-${child.status}`}>{child.status}</b>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mission-actions">
+                  <button className="text-action" onClick={() => onExpandOrchestration(expanded ? null : item.id)}>
+                    {expanded ? "Hide CEO report" : item.result ? "View CEO report" : "View request"}
+                  </button>
+                  {active ? (
+                    <button className="text-action danger" onClick={() => onCancelOrchestration(item)} disabled={busyAction === `orchestration-${item.id}`}>
+                      {busyAction === `orchestration-${item.id}` ? "Stopping…" : "Cancel"}
+                    </button>
+                  ) : null}
+                </div>
+                {expanded ? (
+                  <div className="mission-detail">
+                    <strong>Founder request</strong>
+                    <p>{item.instructions}</p>
+                    {item.error ? <><strong>Workflow error</strong><p className="task-error">{item.error}</p></> : null}
+                    {item.result ? <><strong>CEO consolidated report</strong><pre>{item.result}</pre></> : null}
+                    {!item.result && !item.error ? <small>CEO is working through the plan and specialist handoffs.</small> : null}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </>
+      ) : null}
       {tasks.length ? tasks.map((task) => (
         <article className="mission-card" key={task.id}>
           <div className="mission-topline">
