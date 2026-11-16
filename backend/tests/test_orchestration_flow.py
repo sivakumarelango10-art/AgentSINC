@@ -7,7 +7,7 @@ import httpx
 
 from app.db import connect, create_orchestration, get_orchestration_detail, init_db
 from app import orchestrator
-from app.orchestrator import CEO_PLAN_SCHEMA, _claim_planning, _claim_synthesis, _explicit_specialist_plan, _plan, _synthesize, _validate_plan
+from app.orchestrator import CEO_PLAN_SCHEMA, _claim_planning, _claim_synthesis, _explicit_specialist_plan, _plan, _strip_internal_thinking, _synthesize, _validate_plan
 
 
 def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypatch) -> None:
@@ -203,3 +203,22 @@ Review automated tests, error handling, runtime reliability, security boundaries
         "developer", "designer", "researcher", "tester"
     ]
     assert all(task["status"] == "queued" for task in detail["tasks"])
+
+
+
+def test_ceo_output_removes_think_blocks() -> None:
+    content = (
+        "## Final report\\nUseful summary.\\n"
+        "<think>private internal reasoning that must not be shown</think>\\n"
+        "## Recommendations\\nKeep backups."
+    )
+    cleaned = _strip_internal_thinking(content)
+    assert "private internal reasoning" not in cleaned
+    assert "<think>" not in cleaned
+    assert "Useful summary." in cleaned
+    assert "Keep backups." in cleaned
+
+
+def test_ceo_output_drops_unterminated_think_block() -> None:
+    cleaned = _strip_internal_thinking("Final answer\\n<think>unfinished hidden reasoning")
+    assert cleaned == "Final answer"
