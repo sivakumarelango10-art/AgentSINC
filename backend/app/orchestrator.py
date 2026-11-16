@@ -217,7 +217,10 @@ async def _plan(
         )
         plan = _validate_plan(_json_object(raw))
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-        _fail(orchestration_id, f"CEO planning error: {exc}")
+        if orchestration_cancelled(orchestration_id):
+            _cancel(orchestration_id, "Founder cancelled the request while CEO planning was running.")
+        else:
+            _fail(orchestration_id, f"CEO planning error: {exc}")
         return
 
     if orchestration_cancelled(orchestration_id):
@@ -387,7 +390,10 @@ async def _synthesize(
             timeout_seconds,
         )
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-        _fail(orchestration_id, f"CEO synthesis error: {exc}")
+        if orchestration_cancelled(orchestration_id):
+            _cancel(orchestration_id, "Founder cancelled the request while CEO synthesis was running.")
+        else:
+            _fail(orchestration_id, f"CEO synthesis error: {exc}")
         return
 
     if orchestration_cancelled(orchestration_id):
@@ -396,17 +402,29 @@ async def _synthesize(
 
     now = utc_now()
     with connect() as connection:
-        connection.execute(
+        updated = connection.execute(
             """UPDATE orchestrations SET status='completed', stage='completed',
             result=?, error=NULL, updated_at=?, completed_at=?
             WHERE id=? AND cancel_requested=0""",
             (result, now, now, orchestration_id),
         )
-        add_event(
-            connection, "ceo", None, "orchestration_completed",
-            f'CEO completed the founder request: "{request["title"]}".',
-            orchestration_id=orchestration_id,
-        )
+        if updated.rowcount == 1:
+            add_event(
+                connection, "ceo", None, "orchestration_completed",
+                f'CEO completed the founder request: "{request["title"]}".',
+                orchestration_id=orchestration_id,
+            )
+        else:
+            connection.execute(
+                """UPDATE orchestrations SET status='cancelled', stage='cancelled',
+                error='Founder cancelled the CEO request.', updated_at=?, completed_at=? WHERE id=?""",
+                (now, now, orchestration_id),
+            )
+            add_event(
+                connection, "ceo", None, "orchestration_cancelled",
+                "CEO request cancelled by the founder.",
+                orchestration_id=orchestration_id,
+            )
         connection.commit()
 
 
