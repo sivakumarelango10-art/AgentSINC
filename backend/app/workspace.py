@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Iterable
 
 MAX_INDEX_FILES = 1600
@@ -80,12 +80,19 @@ def safe_file_path(relative_path: str) -> Path:
     raw = relative_path.strip()
     if not raw:
         raise WorkspaceError("A relative workspace path is required.")
-    candidate_part = Path(raw)
-    if candidate_part.is_absolute() or ".." in candidate_part.parts:
+    normalized = raw.replace("\\", "/")
+    windows_path = PureWindowsPath(raw)
+    candidate_part = Path(normalized)
+    if windows_path.is_absolute() or windows_path.drive or candidate_part.is_absolute() or ".." in candidate_part.parts:
         raise WorkspaceError("Absolute paths and parent-directory traversal are not allowed.")
 
     root = workspace_root()
     candidate = root / candidate_part
+    cursor = root
+    for part in candidate_part.parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            raise WorkspaceError("Symbolic links are excluded from workspace inspection.")
     try:
         resolved = candidate.resolve(strict=True)
         relative = resolved.relative_to(root)
@@ -218,7 +225,10 @@ def build_workspace_context(query: str) -> WorkspaceContext:
             content = by_path[relative].read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        content = content[:min(MAX_FILE_BYTES, remaining - 300)]
+        per_file_limit = 5_000 if relative.endswith((".md", ".json", ".yml", ".yaml", ".toml", ".txt")) else 3_500
+        if relative in {"backend/app/main.py", "backend/app/worker.py", "backend/app/db.py"}:
+            per_file_limit = 6_000
+        content = content[:min(per_file_limit, remaining - 300)]
         if not content.strip():
             continue
         section = f"### FILE: {relative}\n[BEGIN FILE CONTENT]\n{content}\n[END FILE CONTENT]"
