@@ -42,7 +42,9 @@ AGENTSINC_GOOGLE_SEARCH_MODEL=gemini-2.5-flash
 
 Keep the key out of Git, screenshots, mission text and support messages. The `.env` file is local configuration and must not be committed. Restart both the API and the worker after changing it. The Studio Settings panel displays whether Google Search is enabled.
 
-Google's published Gemini API pricing currently lists a 500 requests-per-day free limit for the Google Search tool shared by Flash and Flash-Lite models. Limits, model availability, region access and free-tier terms can change. A single grounded prompt may result in multiple Google Search queries. Check Google's current pricing before relying on the free tier: https://ai.google.dev/gemini-api/docs/pricing
+Google's published Gemini API pricing currently lists up to 500 Google Search-grounded requests per day at no charge for Gemini 2.5 Flash and Flash-Lite standard free-tier access. A single grounded prompt may result in multiple search queries, and limits can change. The current model catalogue also warns that Gemini 2.5 access is limited for projects that have not actively used those models before; new projects are directed to newer Gemini 3.x models. Google does not list Search grounding as available on the Gemini 3.x free tier in the current pricing table. This connector therefore does not automatically fall forward to a different model or paid tier if 2.5 access is unavailable. Verify the current account's model access and pricing before enabling it: https://ai.google.dev/gemini-api/docs/pricing and https://ai.google.dev/gemini-api/docs/models.
+
+Google's pricing page also states that free-tier content may be used to improve Google products. Do not submit confidential company data, personal data or secrets through this optional connector. The free quota is not a guarantee that every account/region can use the model or that usage above the free allowance will remain free.
 
 Google Search grounding is an external service. Mission prompts sent to it leave the local machine; do not include confidential business information or personal data in Research Agent instructions unless that external processing is acceptable.
 
