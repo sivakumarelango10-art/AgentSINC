@@ -21,6 +21,7 @@ export type OfficeAgent = {
   color: string;
   model: string;
   position: [number, number, number];
+  paused?: boolean;
 };
 
 export const BRAND_THEMES: Record<
