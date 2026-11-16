@@ -71,6 +71,8 @@ export type RuntimeStatus = {
   zero_cost_mode: boolean;
   execution_mode: string;
   last_generation_metrics?: GenerationMetrics;
+  memory_records?: number;
+  google_search_enabled?: boolean;
 };
 
 export type WorkspaceSummary = {
