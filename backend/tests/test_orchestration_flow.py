@@ -6,7 +6,7 @@ import json
 import httpx
 
 from app.db import connect, create_orchestration, get_orchestration_detail, init_db
-from app.orchestrator import _claim_planning, _claim_synthesis, _plan, _synthesize
+from app.orchestrator import CEO_PLAN_SCHEMA, _claim_planning, _claim_synthesis, _plan, _synthesize, _validate_plan
 
 
 def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypatch) -> None:
@@ -31,12 +31,14 @@ def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypa
             },
         ],
     }
-    seen_formats: list[str | None] = []
+    seen_formats: list[object] = []
+    seen_think_values: list[object] = []
 
     async def handler(http_request: httpx.Request) -> httpx.Response:
         payload = json.loads(http_request.content)
         seen_formats.append(payload.get("format"))
-        if payload.get("format") == "json":
+        seen_think_values.append(payload.get("think"))
+        if isinstance(payload.get("format"), dict):
             answer = json.dumps(generated_plan)
         else:
             answer = "CEO consolidated release readiness report."
@@ -85,4 +87,57 @@ def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypa
     assert final["status"] == "completed"
     assert final["stage"] == "completed"
     assert final["result"] == "CEO consolidated release readiness report."
-    assert seen_formats == ["json", None]
+    assert seen_formats == [CEO_PLAN_SCHEMA, None]
+    assert seen_think_values == [False, None]
+
+
+def test_qwen_plan_without_summary_derives_one_from_validated_tasks() -> None:
+    plan = _validate_plan(
+        {
+            "tasks": [
+                {
+                    "agent_id": "developer",
+                    "title": "Review backend API",
+                    "instructions": "Inspect the backend API source files and report implementation risks.",
+                },
+                {
+                    "agent_id": "tester",
+                    "title": "Prepare runtime test checklist",
+                    "instructions": "Inspect tests and prepare a clear runtime validation checklist.",
+                },
+            ]
+        }
+    )
+
+    assert plan["summary"] == (
+        "CEO delegated specialist missions: Review backend API; "
+        "Prepare runtime test checklist"
+    )
+    assert len(plan["tasks"]) == 2
+
+
+def test_qwen_plan_accepts_supported_summary_and_task_aliases() -> None:
+    plan = _validate_plan(
+        {
+            "plan_summary": "Review the source and verify quality.",
+            "specialist_tasks": [
+                {
+                    "agent_id": "researcher",
+                    "title": "Review system documentation",
+                    "instructions": "Inspect actual documentation and identify operational requirements.",
+                }
+            ],
+        }
+    )
+
+    assert plan["summary"] == "Review the source and verify quality."
+    assert plan["tasks"][0]["agent_id"] == "researcher"
+
+
+def test_ceo_plan_still_rejects_empty_or_invalid_delegations() -> None:
+    try:
+        _validate_plan({"summary": "No work is planned.", "tasks": []})
+    except RuntimeError as exc:
+        assert "specialist missions" in str(exc)
+    else:
+        raise AssertionError("An empty specialist plan must be rejected.")
