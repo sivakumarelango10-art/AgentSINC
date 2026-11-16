@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Callable
 
 import httpx
@@ -10,6 +11,20 @@ from .workspace import WorkspaceError, build_workspace_context
 
 SPECIALIST_IDS = ("developer", "designer", "researcher", "tester")
 MAX_SPECIALIST_TASKS = 4
+
+
+def _bounded_setting(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+OLLAMA_KEEP_ALIVE = os.getenv("AGENTSINC_OLLAMA_KEEP_ALIVE", "20m")
+OLLAMA_CONTEXT_TOKENS = _bounded_setting("AGENTSINC_OLLAMA_CONTEXT_TOKENS", 4096, 2048, 8192)
+CEO_PLAN_MAX_TOKENS = _bounded_setting("AGENTSINC_CEO_PLAN_MAX_TOKENS", 850, 400, 1400)
+CEO_SYNTHESIS_MAX_TOKENS = _bounded_setting("AGENTSINC_CEO_SYNTHESIS_MAX_TOKENS", 900, 500, 1600)
 
 CEO_PLAN_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -69,19 +84,25 @@ async def _chat(
     json_mode: bool = False,
     cancel_check: Callable[[], bool] | None = None,
     json_schema: dict[str, Any] | None = None,
+    max_output_tokens: int | None = None,
 ) -> str:
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "stream": True,
-        "keep_alive": "10m",
-        "options": {"temperature": 0.0 if json_schema or json_mode else 0.18},
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": {
+            "temperature": 0.0 if json_schema or json_mode else 0.18,
+            "num_ctx": OLLAMA_CONTEXT_TOKENS,
+        },
     }
     if json_schema is not None:
         payload["format"] = json_schema
-        payload["options"]["num_predict"] = 1800
+        payload["options"]["num_predict"] = CEO_PLAN_MAX_TOKENS
     elif json_mode:
         payload["format"] = "json"
+    if max_output_tokens is not None:
+        payload["options"]["num_predict"] = max(128, min(max_output_tokens, 1800))
     if model.lower().startswith("qwen3"):
         payload["think"] = False
 
@@ -297,6 +318,7 @@ async def _plan(
             json_mode=True,
             cancel_check=lambda: orchestration_cancelled(orchestration_id),
             json_schema=CEO_PLAN_SCHEMA,
+            max_output_tokens=CEO_PLAN_MAX_TOKENS,
         )
         plan = _validate_plan(_json_object(raw))
     except OrchestrationCancelled:
@@ -487,6 +509,7 @@ async def _synthesize(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             timeout_seconds,
             cancel_check=lambda: orchestration_cancelled(orchestration_id),
+            max_output_tokens=CEO_SYNTHESIS_MAX_TOKENS,
         )
     except OrchestrationCancelled:
         _cancel(orchestration_id, "Founder cancelled the request during CEO synthesis.")
