@@ -295,7 +295,7 @@ async def run_worker() -> None:
             models: list[str] = []
             last_model_check = 0.0
             while True:
-            now = asyncio.get_running_loop().time()
+                now = asyncio.get_running_loop().time()
                 if now - last_model_check >= 10 or not models:
                     last_model_check = now
                     try:
