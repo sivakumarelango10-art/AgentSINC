@@ -35,15 +35,15 @@ STOP_WORDS = {
 
 
 SECRET_ASSIGNMENT = re.compile(
-    r"""(?im)^([ \\t]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|passwd|authorization)[ \\t]*[:=][ \\t]*)(?:"[^"\\r\\n]*"|'[^'\\r\\n]*'|[^\\s#]+)"""
+    r"""(?im)^([ \t]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|passwd|authorization)[ \t]*[:=][ \t]*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s#]+)"""
 )
 JSON_SECRET_ASSIGNMENT = re.compile(
-    r"""(?i)(["'](?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|authorization)["'][ \\t]*:[ \\t]*)(["'])[^"']*\\2"""
+    r"""(?i)(["'](?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|authorization)["'][ \t]*:[ \t]*)(["'])[^"']*\2"""
 )
 KNOWN_TOKEN = re.compile(
-    r"(?i)\\b(?:github_pat_|ghp_|gho_|ghu_|ghs_|ghr_|sk_live_|sk_test_|xox[baprs]-)[A-Za-z0-9_-]{12,}\\b"
+    r"(?i)\b(?:github_pat_|ghp_|gho_|ghu_|ghs_|ghr_|sk_live_|sk_test_|xox[baprs]-)[A-Za-z0-9_-]{12,}\b"
 )
-BEARER_TOKEN = re.compile(r"(?i)\\bBearer[ \\t]+[A-Za-z0-9._~+/-]+=*")
+BEARER_TOKEN = re.compile(r"(?i)\bBearer[ \t]+[A-Za-z0-9._~+/-]+=*")
 PRIVATE_KEY_BLOCK = re.compile(
     r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
     re.DOTALL,
@@ -54,11 +54,10 @@ def redact_sensitive_text(content: str) -> str:
     safe = PRIVATE_KEY_BLOCK.sub("[REDACTED PRIVATE KEY]", content)
     safe = KNOWN_TOKEN.sub("[REDACTED TOKEN]", safe)
     safe = BEARER_TOKEN.sub("Bearer [REDACTED TOKEN]", safe)
-    safe = SECRET_ASSIGNMENT.sub(r"\\1[REDACTED]", safe)
-    safe = JSON_SECRET_ASSIGNMENT.sub(r'\\1"[REDACTED]"', safe)
-    safe = re.sub(r"\\bAKIA[0-9A-Z]{16}\\b", "[REDACTED ACCESS KEY]", safe)
+    safe = SECRET_ASSIGNMENT.sub(r"\1[REDACTED]", safe)
+    safe = JSON_SECRET_ASSIGNMENT.sub(r'\1"[REDACTED]"', safe)
+    safe = re.sub(r"\bAKIA[0-9A-Z]{16}\b", "[REDACTED ACCESS KEY]", safe)
     return safe
-
 
 class WorkspaceError(ValueError):
     """Raised when a workspace path is missing or outside the configured root."""
