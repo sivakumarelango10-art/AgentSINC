@@ -155,6 +155,7 @@ export function OfficeExperience() {
       const snapshot = await getOverview();
       setAgents(snapshot.agents);
       setTasks(snapshot.tasks);
+      setOrchestrations(snapshot.orchestrations ?? []);
       setEvents(snapshot.events);
       setRuntime(snapshot.runtime);
       setRuntimeError("");
@@ -163,6 +164,7 @@ export function OfficeExperience() {
       setRuntimeError(error instanceof Error ? error.message : "Local runtime is unavailable.");
       setAgents(INITIAL_AGENTS);
       setTasks([]);
+      setOrchestrations([]);
       setEvents([]);
     }
   };
@@ -179,6 +181,7 @@ export function OfficeExperience() {
         if (!disposed) {
           setAgents(snapshot.agents);
           setTasks(snapshot.tasks);
+          setOrchestrations(snapshot.orchestrations ?? []);
           setEvents(snapshot.events);
           setRuntime(snapshot.runtime);
           setRuntimeError("");
@@ -189,6 +192,7 @@ export function OfficeExperience() {
           setRuntimeError(error instanceof Error ? error.message : "Local runtime is unavailable.");
           setAgents(INITIAL_AGENTS);
           setTasks([]);
+          setOrchestrations([]);
           setEvents([]);
         }
       } finally {
@@ -793,14 +797,14 @@ function MissionPanel({
             </div>
           ) : null}
         </article>
-      )) : (
+      )) : !orchestrations.length ? (
         <div className="panel-empty compact">
           <span className="empty-symbol">▤</span>
           <strong>No missions yet</strong>
           <p>Assign a mission to a specialist. It will be stored locally and picked up by the background worker.</p>
           <button className="runtime-action primary" onClick={onNewMission}>Create first mission</button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
