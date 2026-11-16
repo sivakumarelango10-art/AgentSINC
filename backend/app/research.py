@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 import httpx
@@ -10,6 +11,21 @@ def google_search_is_enabled() -> bool:
     enabled = os.getenv("AGENTSINC_GOOGLE_SEARCH_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
     key = os.getenv("GEMINI_API_KEY", "").strip()
     return enabled and bool(key)
+
+
+def _redact_external_prompt(value: str, limit: int) -> str:
+    """Redact common credential patterns before a prompt leaves the local machine."""
+    cleaned = re.sub(
+        r'''(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)\b\s*[:=]\s*["']?([^\s"',;]+)["']?''',
+        r"\1=[REDACTED]",
+        str(value or ""),
+    )
+    cleaned = re.sub(
+        r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}",
+        "Bearer [REDACTED]",
+        cleaned,
+    )
+    return cleaned[:limit]
 
 
 async def fetch_google_search_context(
@@ -36,8 +52,8 @@ async def fetch_google_search_context(
         "Prioritize official documentation and primary sources, use current sources where relevant, "
         "distinguish facts from recommendations, and include source URLs in your response. "
         "Do not claim to inspect local files or execute actions.\n\n"
-        f"MISSION: {mission_title[:160]}\n\n"
-        f"RESEARCH QUESTION AND SCOPE:\n{mission_instructions[:5000]}"
+        f"MISSION: {_redact_external_prompt(mission_title, 160)}\n\n"
+        f"RESEARCH QUESTION AND SCOPE:\n{_redact_external_prompt(mission_instructions, 5000)}"
     )
     response = await client.post(
         f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
