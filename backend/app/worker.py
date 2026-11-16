@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -10,12 +11,25 @@ import httpx
 
 from .db import add_event, connect, get_runtime_value, set_runtime_value, utc_now
 from .workspace import WorkspaceError, build_workspace_context
-from .orchestrator import process_next_orchestration, recover_orchestrations, task_cancelled
+from .orchestrator import OLLAMA_CONTEXT_TOKENS, OLLAMA_KEEP_ALIVE, process_next_orchestration, recover_orchestrations, task_cancelled
 
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 POLL_SECONDS = float(os.getenv("AGENTSINC_WORKER_POLL_SECONDS", "2"))
 MODEL_TIMEOUT = float(os.getenv("AGENTSINC_MODEL_TIMEOUT_SECONDS", "900"))
+
+
+def _bounded_setting(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return max(minimum, min(value, maximum))
+
+
+SPECIALIST_MAX_OUTPUT_TOKENS = _bounded_setting("AGENTSINC_SPECIALIST_MAX_TOKENS", 650, 250, 1200)
+
+
 class MissionCancelled(Exception):
     """Raised when a founder cancels a running local model response."""
 
@@ -201,16 +215,25 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
         "For architecture/codebase questions, base your findings on these actual files. Cite relative "
         "file paths inline. State when a file was not supplied or when evidence is insufficient. "
         "Do not suggest that you executed commands or changed files.\n\n"
-        "Return a clear deliverable with a summary, evidence-based findings, assumptions, risks and next actions."
+        "Be concise and evidence-led. Target a short report with a summary, key findings, risks and next actions. "
+        "Prioritize the strongest evidence instead of repeating the full source context."
     )
     payload = {
         "model": model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         "stream": True,
-        "keep_alive": "10m",
-        "options": {"temperature": 0.25},
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+        "options": {
+            "temperature": 0.2,
+            "num_ctx": OLLAMA_CONTEXT_TOKENS,
+            "num_predict": SPECIALIST_MAX_OUTPUT_TOKENS,
+        },
     }
+    if model.lower().startswith("qwen3"):
+        payload["think"] = False
     chunks: list[str] = []
+    final_metrics: dict[str, Any] = {}
+    generation_started = time.perf_counter()
     last_progress_event = 0
     generated_length = 0
     async with client.stream(
@@ -232,6 +255,14 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
                 chunks.append(content)
                 generated_length += len(content)
             if item.get("done"):
+                final_metrics = {
+                    key: item.get(key)
+                    for key in (
+                        "total_duration", "load_duration", "prompt_eval_count",
+                        "prompt_eval_duration", "eval_count", "eval_duration",
+                    )
+                    if item.get(key) is not None
+                }
                 break
             progress = min(90, 12 + generated_length // 45)
             if progress >= last_progress_event + 12:
@@ -242,6 +273,32 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
     result = "".join(chunks).strip()
     if not result:
         raise RuntimeError("Ollama returned an empty response.")
+
+    elapsed_seconds = max(0.001, time.perf_counter() - generation_started)
+    eval_count = int(final_metrics.get("eval_count") or 0)
+    eval_duration_ns = int(final_metrics.get("eval_duration") or 0)
+    tokens_per_second = (
+        round(eval_count / (eval_duration_ns / 1_000_000_000), 2)
+        if eval_duration_ns > 0 else None
+    )
+    performance = {
+        "model": model,
+        "agent_id": task["agent_id"],
+        "task_id": task["id"],
+        "elapsed_seconds": round(elapsed_seconds, 2),
+        "prompt_tokens": int(final_metrics.get("prompt_eval_count") or 0),
+        "generated_tokens": eval_count,
+        "tokens_per_second": tokens_per_second,
+        "load_seconds": round(int(final_metrics.get("load_duration") or 0) / 1_000_000_000, 2),
+        "measured_at": utc_now(),
+    }
+    set_runtime_value("last_generation_metrics", json.dumps(performance))
+    speed_text = f"{tokens_per_second} generated tokens/sec" if tokens_per_second else "token speed unavailable"
+    print(
+        f"Mission performance [{task['id']}]: {eval_count} tokens, {speed_text}, "
+        f"{performance['elapsed_seconds']}s total.",
+        flush=True,
+    )
     return result
 
 
