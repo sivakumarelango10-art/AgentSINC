@@ -33,11 +33,13 @@ def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypa
     }
     seen_formats: list[object] = []
     seen_think_values: list[object] = []
+    seen_payloads: list[dict[str, object]] = []
 
     async def handler(http_request: httpx.Request) -> httpx.Response:
         payload = json.loads(http_request.content)
         seen_formats.append(payload.get("format"))
         seen_think_values.append(payload.get("think"))
+        seen_payloads.append(payload)
         if isinstance(payload.get("format"), dict):
             answer = json.dumps(generated_plan)
         else:
@@ -89,6 +91,9 @@ def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypa
     assert final["result"] == "CEO consolidated release readiness report."
     assert seen_formats == [CEO_PLAN_SCHEMA, None]
     assert seen_think_values == [False, False]
+    assert [payload["keep_alive"] for payload in seen_payloads] == ["20m", "20m"]
+    assert [payload["options"]["num_ctx"] for payload in seen_payloads] == [4096, 4096]
+    assert [payload["options"]["num_predict"] for payload in seen_payloads] == [850, 900]
 
 
 def test_qwen_plan_without_summary_derives_one_from_validated_tasks() -> None:
