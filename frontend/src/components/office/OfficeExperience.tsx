@@ -38,7 +38,7 @@ const OfficeViewport = dynamic(() => import("./OfficeViewport"), {
 });
 
 type PanelKey = "agents" | "tasks" | "activity" | "team" | "approvals" | "settings";
-type RoomKey = "all" | "command" | "development" | "design" | "research" | "quality";
+type RoomKey = "all" | "command" | "development" | "design" | "research" | "quality" | "discussion" | "meeting";
 
 const humanTeam = [
   { name: "Elango S", role: "Founder", initials: "ES" },
@@ -61,6 +61,8 @@ const roomLinks: { id: RoomKey; label: string; short: string; tint: string }[] =
   { id: "design", label: "Design Studio", short: "DES", tint: "#FB7185" },
   { id: "research", label: "Research Library", short: "RES", tint: "#FBBF24" },
   { id: "quality", label: "Quality Lab", short: "QA", tint: "#4ADE80" },
+  { id: "discussion", label: "Discussion Room", short: "DISC", tint: "#8B5CF6" },
+  { id: "meeting", label: "Meeting Room", short: "MEET", tint: "#0F9D91" },
 ];
 
 const navigation: { id: PanelKey; label: string; glyph: string }[] = [
@@ -131,6 +133,7 @@ export function OfficeExperience() {
   const [notice, setNotice] = useState("");
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [expandedOrchestrationId, setExpandedOrchestrationId] = useState<string | null>(null);
+  const [expandedChildTaskId, setExpandedChildTaskId] = useState<string | null>(null);
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.id === selectedAgentId) ?? agents[0],
@@ -234,12 +237,13 @@ export function OfficeExperience() {
     setBusyAction("assign");
     setNotice("");
     try {
-      if (selectedAgent.id === "ceo") {
+      if (selectedAgent.id === "ceo" || selectedAgent.id === "team_lead") {
         const response = await createOrchestration({
           title: missionTitle.trim(),
           instructions: missionInstructions.trim(),
         });
-        setNotice(`CEO accepted the request and created orchestration ${response.orchestration.id.slice(0, 8)}.`);
+        const coordinator = selectedAgent.id === "team_lead" ? "Team Lead" : "CEO";
+        setNotice(`${coordinator} accepted the request and created orchestration ${response.orchestration.id.slice(0, 8)}.`);
       } else {
         await createMission({
           agent_id: selectedAgent.id,
@@ -416,7 +420,7 @@ export function OfficeExperience() {
         <h1>Welcome to<br /><em>SINC headquarters.</em></h1>
         <p className="world-intro-copy">Track local AI work, missions and agent activity in one place.</p>
         <div className="world-intro-stats">
-          <div><strong>{agents.length.toString().padStart(2, "0")}</strong><span>AI SPECIALISTS</span></div>
+          <div><strong>{agents.length.toString().padStart(2, "0")}</strong><span>OFFICE AGENTS</span></div>
           <i />
           <div><strong>{(activeMissionCount + activeOrchestrationCount).toString().padStart(2, "0")}</strong><span>OPEN MISSIONS</span></div>
           <i />
@@ -548,7 +552,7 @@ export function OfficeExperience() {
       <footer className="world-footer">
         <div className="footer-brand">AGENTSINC <span>·</span> SINC INTELLIGENCE</div>
         <div className="footer-shortcuts"><kbd>DRAG</kbd> ORBIT <i /> <kbd>SCROLL</kbd> ZOOM <i /> <kbd>CLICK</kbd> TRACK AGENT</div>
-        <div className="footer-version">LOCAL CEO ORCHESTRATION / PHASE 4B</div>
+        <div className="footer-version">LOCAL CEO → TEAM LEAD ORCHESTRATION / PHASE 5</div>
       </footer>
     </main>
   );
@@ -586,6 +590,8 @@ function AgentPanel({
   notice: string;
 }) {
   const isPaused = selectedAgent.paused === true || selectedAgent.status === "paused";
+  const isCoordinator = selectedAgent.id === "ceo" || selectedAgent.id === "team_lead";
+  const coordinatorName = selectedAgent.id === "team_lead" ? "Team Lead" : "CEO";
   const latestEvents = events.slice(0, 7);
   return (
     <div className="panel-content">
@@ -619,13 +625,13 @@ function AgentPanel({
       </div>
 
       <form className="mission-form" onSubmit={onAssign}>
-        <div className="panel-section-label">{selectedAgent.id === "ceo" ? "SEND REQUEST TO CEO" : "ASSIGN A NEW MISSION"} <span>LOCAL AI</span></div>
+        <div className="panel-section-label">{isCoordinator ? "SEND REQUEST TO COORDINATOR" : "ASSIGN A NEW MISSION"} <span>LOCAL AI</span></div>
         <label htmlFor="mission-title">Mission title</label>
         <input
           id="mission-title"
           value={missionTitle}
           onChange={(event) => setMissionTitle(event.target.value)}
-          placeholder={selectedAgent.id === "ceo" ? "Describe the outcome you want the CEO to coordinate" : `Give ${selectedAgent.name} a task`}
+          placeholder={isCoordinator ? "Describe the outcome for the Team Lead to coordinate" : `Give ${selectedAgent.name} a task`}
           minLength={3}
           maxLength={120}
           required
@@ -637,16 +643,16 @@ function AgentPanel({
           onChange={(event) => setMissionInstructions(event.target.value)}
           placeholder="Describe the outcome, context and constraints…"
           rows={4}
-          minLength={selectedAgent.id === "ceo" ? 20 : 10}
+          minLength={isCoordinator ? 20 : 10}
           maxLength={12000}
           required
         />
         <button className="runtime-action primary full" type="submit" disabled={!runtime.api_connected || busyAction === "assign" || isPaused}>
-          {busyAction === "assign" ? "Submitting…" : selectedAgent.id === "ceo" ? "Send request to CEO" : "Assign mission to agent"}
+          {busyAction === "assign" ? "Submitting…" : isCoordinator ? `Send request to ${coordinatorName}` : "Assign mission to agent"}
         </button>
         {!runtime.api_connected ? <small className="form-hint">Start the local API to enable assignment.</small> : null}
         {runtime.api_connected && (!runtime.worker_online || !runtime.ollama_online) ? <small className="form-hint">Mission can queue now; start Ollama and the worker to process it.</small> : null}
-        <small className="form-hint">{selectedAgent.id === "ceo" ? "CEO plans the request, delegates specialist missions, waits for their reports and prepares one consolidated response." : "The local model returns analysis and text deliverables. It cannot edit files or use external tools yet."}</small>
+        <small className="form-hint">{isCoordinator ? "The CEO receives founder requests. The Team Lead plans and delegates work to Research, Design, Development and QA, then consolidates their reports." : "The local model returns analysis and text deliverables. Repository edits and code execution remain approval-gated and disabled."}</small>
       </form>
 
       <div className="panel-section-label">AGENT TIMELINE <span>{events.length.toString().padStart(2, "0")}</span></div>
@@ -706,13 +712,14 @@ function MissionPanel({
   busyAction: string;
   onNewMission: () => void;
 }) {
+  const [expandedChildTaskId, setExpandedChildTaskId] = useState<string | null>(null);
   const agentNames = new Map(agents.map((agent) => [agent.id, agent.name]));
   return (
     <div className="panel-content mission-list">
       <button className="runtime-action primary full" onClick={onNewMission}>+ Assign a mission</button>
       {orchestrations.length ? (
         <>
-          <div className="panel-section-label">CEO ORCHESTRATIONS <span>{orchestrations.length.toString().padStart(2, "0")}</span></div>
+          <div className="panel-section-label">FOUNDER REQUESTS · TEAM LEAD QUEUE <span>{orchestrations.length.toString().padStart(2, "0")}</span></div>
           {orchestrations.map((item) => {
             const active = item.status === "queued" || item.status === "running";
             const expanded = expandedOrchestrationId === item.id;
@@ -729,13 +736,37 @@ function MissionPanel({
                 <div className="mission-progress"><i style={{ width: `${item.progress}%` }} /></div>
                 {item.tasks.length ? (
                   <div className="orchestration-children">
-                    {item.tasks.map((child) => (
-                      <div className="orchestration-child" key={child.id}>
-                        <span>{agentNames.get(child.agent_id) ?? child.agent_id}</span>
-                        <small>{child.title}</small>
-                        <b className={`mission-status status-${child.status}`}>{child.status}</b>
-                      </div>
-                    ))}
+                    {item.tasks.map((child) => {
+                      const childExpanded = expandedChildTaskId === child.id;
+                      return (
+                        <div className="orchestration-child" key={child.id}>
+                          <div className="orchestration-child-main">
+                            <span>{agentNames.get(child.agent_id) ?? child.agent_id}</span>
+                            <small title={child.title}>{child.title}</small>
+                            <b className={`mission-status status-${child.status}`}>{child.status}</b>
+                          </div>
+                          <button
+                            className="text-action child-report-toggle"
+                            type="button"
+                            aria-expanded={childExpanded}
+                            onClick={() => setExpandedChildTaskId(childExpanded ? null : child.id)}
+                          >
+                            {childExpanded ? "Hide report" : child.result ? "View report" : "View task"}
+                          </button>
+                          {childExpanded ? (
+                            <div className="orchestration-child-detail">
+                              <strong>{agentNames.get(child.agent_id) ?? child.agent_id} · {child.title}</strong>
+                              <span className="child-task-id">TASK {child.id.slice(0, 8).toUpperCase()}</span>
+                              <b>Assigned instructions</b>
+                              <p>{child.instructions}</p>
+                              {child.error ? <><b>Execution error</b><p className="task-error">{child.error}</p></> : null}
+                              {child.result ? <><b>Specialist report</b><pre>{child.result}</pre></> : null}
+                              {!child.result && !child.error ? <small>This specialist has not produced a final report yet.</small> : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
                 <div className="mission-actions">
@@ -923,6 +954,22 @@ function SettingsPanel({
         <small>Only models already installed on this computer are listed. Selecting a model does not download anything.</small>
       </div>
 
+      <div className="runtime-health-card">
+        <div className="runtime-health-head">
+          <strong>PERSISTENT LEARNING MEMORY</strong>
+          <span className="health-chip ready">{(runtime.memory_records ?? 0).toLocaleString()} RECORDS</span>
+        </div>
+        <p className="runtime-feature-copy">Completed mission outcomes are stored in the local SQLite database and retrieved as context for future work.</p>
+        <small>This is bounded local memory retrieval, not fine-tuning or model-weight training. The installed Ollama model remains unchanged.</small>
+      </div>
+      <div className="runtime-health-card">
+        <div className="runtime-health-head">
+          <strong>GOOGLE RESEARCH</strong>
+          <span className={runtime.google_search_enabled ? "health-chip ready" : "health-chip"}>{runtime.google_search_enabled ? "ENABLED" : "DISABLED"}</span>
+        </div>
+        <p className="runtime-feature-copy">Only the Research Agent can request optional Google Search-grounded context. The local workspace snapshot and local memory are not sent to Google by this integration.</p>
+        <small>Enable it in backend/.env with AGENTSINC_GOOGLE_SEARCH_ENABLED=true and GEMINI_API_KEY. Google free-tier limits and data handling can change.</small>
+      </div>
       <div className="setting-block">
         <span>WORKER HEARTBEAT</span>
         <strong>{runtime.worker_heartbeat ? formatTime(runtime.worker_heartbeat) : "Not received"}</strong>
