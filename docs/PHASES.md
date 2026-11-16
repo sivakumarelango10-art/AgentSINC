@@ -39,7 +39,19 @@ Acceptance:
 - Scene state is driven by typed sample data, not hard-coded character animation.
 - Keyboard access and reduced-motion behavior are checked.
 
-## Phase 3 — Identity, team and durable company data
+## Phase 3 — Local runtime, task persistence and agent controls (in progress)
+
+**Goal:** make AgentSINC executable locally without paid model APIs or paid hosting. The first slice uses FastAPI, SQLite and a separate Ollama worker. Authentication and multi-user identity remain to be added before public access.
+
+Current deliverables on the Phase 3 branch:
+- Durable five-agent roster, missions and event timeline in SQLite.
+- Local API for assignment, cancellation, retry, pause/resume and installed-model selection.
+- A separate Ollama worker with streaming progress, cancellation, heartbeat, single-worker lease and restart recovery.
+- Frontend polling and live agent/task/activity panels.
+
+Acceptance still outstanding: verify on Elango's Windows machine with the installed Ollama model, run a sustained soak test, add authentication and backups, and decide whether the later production data store remains PostgreSQL.
+
+## Phase 3B — Identity, team and production data
 
 **Goal:** replace mock data with secure accounts and canonical team/agent/task records.
 

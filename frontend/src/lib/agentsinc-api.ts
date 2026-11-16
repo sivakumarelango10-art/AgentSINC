@@ -1,0 +1,116 @@
+const API_BASE =
+  process.env.NEXT_PUBLIC_AGENTSINC_API_URL ?? "http://127.0.0.1:8000";
+
+export type AgentTaskStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export type AgentTask = {
+  id: string;
+  agent_id: string;
+  title: string;
+  instructions: string;
+  status: AgentTaskStatus;
+  progress: number;
+  result: string | null;
+  error: string | null;
+  cancel_requested: boolean;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+export type AgentEvent = {
+  id: number;
+  agent_id: string;
+  task_id: string | null;
+  event_type: string;
+  message: string;
+  created_at: string;
+};
+
+export type RuntimeStatus = {
+  api_connected: boolean;
+  worker_online: boolean;
+  worker_state: string;
+  worker_heartbeat: string | null;
+  ollama_online: boolean;
+  models: string[];
+  selected_model: string | null;
+  zero_cost_mode: boolean;
+  execution_mode: string;
+};
+
+export type RuntimeOverview = {
+  agents: import("../components/office/types").OfficeAgent[];
+  tasks: AgentTask[];
+  events: AgentEvent[];
+  runtime: RuntimeStatus;
+};
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...init?.headers,
+      },
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error("AgentSINC local API is not reachable. Start the backend and worker.");
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message =
+      typeof payload.detail === "string" ? payload.detail : `AgentSINC API returned ${response.status}.`;
+    throw new Error(message);
+  }
+  return payload as T;
+}
+
+export function getOverview(): Promise<RuntimeOverview> {
+  return request<RuntimeOverview>("/api/v1/overview");
+}
+
+export function createMission(input: {
+  agent_id: string;
+  title: string;
+  instructions: string;
+}): Promise<{ task: AgentTask }> {
+  return request("/api/v1/tasks", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function controlAgent(
+  agentId: string,
+  action: "pause" | "resume",
+): Promise<{ ok: boolean; paused: boolean; message: string }> {
+  return request(`/api/v1/agents/${encodeURIComponent(agentId)}/control`, {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
+export function cancelMission(taskId: string): Promise<{ ok: boolean }> {
+  return request(`/api/v1/tasks/${encodeURIComponent(taskId)}/cancel`, {
+    method: "POST",
+  });
+}
+
+export function retryMission(taskId: string): Promise<{ task: AgentTask }> {
+  return request(`/api/v1/tasks/${encodeURIComponent(taskId)}/retry`, {
+    method: "POST",
+  });
+}
+
+export function chooseLocalModel(model: string): Promise<{ ok: boolean; selected_model: string }> {
+  return request("/api/v1/runtime/model", {
+    method: "PATCH",
+    body: JSON.stringify({ model }),
+  });
+}
