@@ -58,7 +58,7 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     progress: 72,
     color: "#A78BFA",
     model: "Orchestrator",
-    position: [0, 0, -2.25],
+    position: [0, 0, -4.5],
   },
   {
     id: "developer",
@@ -70,7 +70,7 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     progress: 64,
     color: "#22D3EE",
     model: "Code Specialist",
-    position: [-4.3, 0, -1.75],
+    position: [-6.3, 0, -0.9],
   },
   {
     id: "designer",
@@ -82,7 +82,7 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     progress: 48,
     color: "#FB7185",
     model: "Visual Specialist",
-    position: [4.3, 0, -1.75],
+    position: [6.3, 0, -0.9],
   },
   {
     id: "researcher",
@@ -94,7 +94,7 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     progress: 35,
     color: "#FBBF24",
     model: "Research Specialist",
-    position: [-4.3, 0, 2.2],
+    position: [-6.3, 0, 4.25],
   },
   {
     id: "tester",
@@ -106,7 +106,7 @@ export const INITIAL_AGENTS: OfficeAgent[] = [
     progress: 0,
     color: "#4ADE80",
     model: "Quality Specialist",
-    position: [4.3, 0, 2.2],
+    position: [6.3, 0, 4.25],
   },
 ];
 
