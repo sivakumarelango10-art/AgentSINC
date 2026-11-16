@@ -34,6 +34,32 @@ STOP_WORDS = {
 }
 
 
+SECRET_ASSIGNMENT = re.compile(
+    r"""(?im)^([ \\t]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|passwd|authorization)[ \\t]*[:=][ \\t]*)(?:"[^"\\r\\n]*"|'[^'\\r\\n]*'|[^\\s#]+)"""
+)
+JSON_SECRET_ASSIGNMENT = re.compile(
+    r"""(?i)(["'](?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|authorization)["'][ \\t]*:[ \\t]*)(["'])[^"']*\\2"""
+)
+KNOWN_TOKEN = re.compile(
+    r"(?i)\\b(?:github_pat_|ghp_|gho_|ghu_|ghs_|ghr_|sk_live_|sk_test_|xox[baprs]-)[A-Za-z0-9_-]{12,}\\b"
+)
+BEARER_TOKEN = re.compile(r"(?i)\\bBearer[ \\t]+[A-Za-z0-9._~+/-]+=*")
+PRIVATE_KEY_BLOCK = re.compile(
+    r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
+    re.DOTALL,
+)
+
+
+def redact_sensitive_text(content: str) -> str:
+    safe = PRIVATE_KEY_BLOCK.sub("[REDACTED PRIVATE KEY]", content)
+    safe = KNOWN_TOKEN.sub("[REDACTED TOKEN]", safe)
+    safe = BEARER_TOKEN.sub("Bearer [REDACTED TOKEN]", safe)
+    safe = SECRET_ASSIGNMENT.sub(r"\\1[REDACTED]", safe)
+    safe = JSON_SECRET_ASSIGNMENT.sub(r'\\1"[REDACTED]"', safe)
+    safe = re.sub(r"\\bAKIA[0-9A-Z]{16}\\b", "[REDACTED ACCESS KEY]", safe)
+    return safe
+
+
 class WorkspaceError(ValueError):
     """Raised when a workspace path is missing or outside the configured root."""
 
@@ -158,7 +184,7 @@ def read_workspace_file(relative_path: str, max_chars: int = 16_000) -> str:
         content = path.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         raise WorkspaceError("The requested file could not be read.") from exc
-    return content[:max(500, min(max_chars, 24_000))]
+    return redact_sensitive_text(content[:max(500, min(max_chars, 24_000))])
 
 
 def search_workspace(query: str, max_results: int = 12) -> list[dict[str, str | int]]:
@@ -175,6 +201,7 @@ def search_workspace(query: str, max_results: int = 12) -> list[dict[str, str | 
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
+        content = redact_sensitive_text(content)
         lower = content.lower()
         path_lower = relative.lower()
         score = sum(4 for token in tokens if token in path_lower)
@@ -228,7 +255,7 @@ def build_workspace_context(query: str) -> WorkspaceContext:
         per_file_limit = 5_000 if relative.endswith((".md", ".json", ".yml", ".yaml", ".toml", ".txt")) else 3_500
         if relative in {"backend/app/main.py", "backend/app/worker.py", "backend/app/db.py"}:
             per_file_limit = 6_000
-        content = content[:min(per_file_limit, remaining - 300)]
+        content = redact_sensitive_text(content[:min(per_file_limit, remaining - 300)])
         if not content.strip():
             continue
         section = f"### FILE: {relative}\n[BEGIN FILE CONTENT]\n{content}\n[END FILE CONTENT]"
