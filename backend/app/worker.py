@@ -213,8 +213,8 @@ async def _run_ollama_task(client: httpx.AsyncClient, task: dict[str, Any], mode
         f"{task['title']} {task['instructions']}",
         limit=3,
     )
-    memory_context = "\\n\\n".join(
-        f"Past mission: {item['title']}\\n{item['content'][:1800]}"
+    memory_context = "\n\n".join(
+        f"Past mission: {item['title']}\n{item['content'][:1800]}"
         for item in memories
     ) or "No related local learning records were found."
 
