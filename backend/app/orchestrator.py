@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -10,6 +10,10 @@ from .workspace import WorkspaceError, build_workspace_context
 
 SPECIALIST_IDS = ("developer", "designer", "researcher", "tester")
 MAX_SPECIALIST_TASKS = 4
+
+
+class OrchestrationCancelled(Exception):
+    """Raised when the founder cancels CEO planning or synthesis."""
 
 
 def orchestration_cancelled(orchestration_id: str) -> bool:
@@ -39,26 +43,47 @@ async def _chat(
     messages: list[dict[str, str]],
     timeout_seconds: float,
     json_mode: bool = False,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     payload: dict[str, Any] = {
         "model": model,
         "messages": messages,
-        "stream": False,
+        "stream": True,
         "keep_alive": "10m",
         "options": {"temperature": 0.18},
     }
     if json_mode:
         payload["format"] = "json"
-    response = await client.post(
+
+    chunks: list[str] = []
+    async with client.stream(
+        "POST",
         f"{base_url}/api/chat",
         json=payload,
         timeout=httpx.Timeout(timeout_seconds, connect=5.0),
-    )
-    response.raise_for_status()
-    content = response.json().get("message", {}).get("content", "")
-    if not isinstance(content, str) or not content.strip():
+    ) as response:
+        response.raise_for_status()
+        async for line in response.aiter_lines():
+            if cancel_check and cancel_check():
+                raise OrchestrationCancelled("Founder cancelled the CEO request.")
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            content = item.get("message", {}).get("content", "")
+            if content:
+                chunks.append(content)
+            if item.get("done"):
+                break
+
+    if cancel_check and cancel_check():
+        raise OrchestrationCancelled("Founder cancelled the CEO request.")
+    result = "".join(chunks).strip()
+    if not result:
         raise RuntimeError("Ollama returned an empty orchestration response.")
-    return content.strip()
+    return result
 
 
 def _json_object(content: str) -> dict[str, Any]:
@@ -108,7 +133,11 @@ def _claim_planning() -> dict[str, Any] | None:
     with connect() as connection:
         connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
-            "SELECT * FROM orchestrations WHERE status='queued' AND stage='planning' ORDER BY created_at ASC LIMIT 1"
+            """SELECT * FROM orchestrations
+            WHERE status='queued' AND stage='planning'
+            AND NOT EXISTS (SELECT 1 FROM orchestrations active WHERE active.status='running')
+            AND EXISTS (SELECT 1 FROM agents WHERE id='ceo' AND is_paused=0)
+            ORDER BY created_at ASC LIMIT 1"""
         ).fetchone()
         if not row:
             connection.commit()
@@ -117,6 +146,10 @@ def _claim_planning() -> dict[str, Any] | None:
         connection.execute(
             "UPDATE orchestrations SET status='running', started_at=?, updated_at=? WHERE id=? AND status='queued'",
             (now, now, row["id"]),
+        )
+        connection.execute(
+            "UPDATE agents SET status='thinking', updated_at=? WHERE id='ceo'",
+            (now,),
         )
         add_event(
             connection, "ceo", None, "orchestration_planning",
@@ -136,6 +169,10 @@ def _fail(orchestration_id: str, message: str) -> None:
             "UPDATE orchestrations SET status='failed', stage='failed', error=?, updated_at=?, completed_at=? WHERE id=?",
             (safe_message, now, now, orchestration_id),
         )
+        connection.execute(
+            "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+            (now,),
+        )
         add_event(
             connection, "ceo", None, "orchestration_failed",
             f"CEO orchestration failed: {safe_message[:240]}",
@@ -150,6 +187,10 @@ def _cancel(orchestration_id: str, message: str) -> None:
         connection.execute(
             "UPDATE orchestrations SET status='cancelled', stage='cancelled', error=?, updated_at=?, completed_at=? WHERE id=?",
             (message[:500], now, now, orchestration_id),
+        )
+        connection.execute(
+            "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+            (now,),
         )
         add_event(
             connection, "ceo", None, "orchestration_cancelled", message,
@@ -214,10 +255,17 @@ async def _plan(
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             timeout_seconds,
             json_mode=True,
+            cancel_check=lambda: orchestration_cancelled(orchestration_id),
         )
         plan = _validate_plan(_json_object(raw))
+    except OrchestrationCancelled:
+        _cancel(orchestration_id, "Founder cancelled the request during CEO planning.")
+        return
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-        _fail(orchestration_id, f"CEO planning error: {exc}")
+        if orchestration_cancelled(orchestration_id):
+            _cancel(orchestration_id, "Founder cancelled the request while CEO planning was running.")
+        else:
+            _fail(orchestration_id, f"CEO planning error: {exc}")
         return
 
     if orchestration_cancelled(orchestration_id):
@@ -227,6 +275,14 @@ async def _plan(
     now = utc_now()
     with connect() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        parent = connection.execute(
+            "SELECT cancel_requested FROM orchestrations WHERE id=?",
+            (orchestration_id,),
+        ).fetchone()
+        if not parent or parent["cancel_requested"]:
+            connection.rollback()
+            _cancel(orchestration_id, "Founder cancelled the request before specialist delegation.")
+            return
         existing = connection.execute(
             "SELECT COUNT(*) FROM tasks WHERE orchestration_id=?", (orchestration_id,)
         ).fetchone()[0]
@@ -247,11 +303,15 @@ async def _plan(
                 _fail(orchestration_id, f"{agent['name']} is paused. Resume the agent and retry.")
                 return
 
-        connection.execute(
+        updated = connection.execute(
             """UPDATE orchestrations SET status='running', stage='executing',
             plan_json=?, updated_at=? WHERE id=? AND cancel_requested=0""",
             (json.dumps(plan), now, orchestration_id),
         )
+        if updated.rowcount != 1:
+            connection.rollback()
+            _cancel(orchestration_id, "Founder cancelled the request before specialist delegation.")
+            return
         from uuid import uuid4
         for item in plan["tasks"]:
             task_id = str(uuid4())
@@ -270,6 +330,10 @@ async def _plan(
                 f"CEO delegated a mission: {item['title']}",
                 orchestration_id=orchestration_id,
             )
+        connection.execute(
+            "UPDATE agents SET status='collaborating', updated_at=? WHERE id='ceo'",
+            (now,),
+        )
         add_event(
             connection, "ceo", None, "orchestration_delegated",
             f"CEO delegated {len(plan['tasks'])} specialist missions. {plan['summary']}",
@@ -307,6 +371,10 @@ def _claim_synthesis() -> dict[str, Any] | None:
                 error='Founder cancelled the CEO request.', updated_at=?, completed_at=? WHERE id=?""",
                 (now, now, row["id"]),
             )
+            connection.execute(
+                "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+                (now,),
+            )
             add_event(
                 connection, "ceo", None, "orchestration_cancelled",
                 "CEO request cancelled by the founder.",
@@ -322,6 +390,10 @@ def _claim_synthesis() -> dict[str, Any] | None:
         connection.execute(
             "UPDATE orchestrations SET stage='synthesizing', updated_at=? WHERE id=?",
             (now, row["id"]),
+        )
+        connection.execute(
+            "UPDATE agents SET status='thinking', updated_at=? WHERE id='ceo'",
+            (now,),
         )
         children = connection.execute(
             """SELECT t.*, a.name AS agent_name, a.role AS agent_role
@@ -373,9 +445,16 @@ async def _synthesize(
             client, base_url, model,
             [{"role": "system", "content": system}, {"role": "user", "content": user}],
             timeout_seconds,
+            cancel_check=lambda: orchestration_cancelled(orchestration_id),
         )
+    except OrchestrationCancelled:
+        _cancel(orchestration_id, "Founder cancelled the request during CEO synthesis.")
+        return
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-        _fail(orchestration_id, f"CEO synthesis error: {exc}")
+        if orchestration_cancelled(orchestration_id):
+            _cancel(orchestration_id, "Founder cancelled the request while CEO synthesis was running.")
+        else:
+            _fail(orchestration_id, f"CEO synthesis error: {exc}")
         return
 
     if orchestration_cancelled(orchestration_id):
@@ -384,17 +463,37 @@ async def _synthesize(
 
     now = utc_now()
     with connect() as connection:
-        connection.execute(
+        updated = connection.execute(
             """UPDATE orchestrations SET status='completed', stage='completed',
             result=?, error=NULL, updated_at=?, completed_at=?
             WHERE id=? AND cancel_requested=0""",
             (result, now, now, orchestration_id),
         )
-        add_event(
-            connection, "ceo", None, "orchestration_completed",
-            f'CEO completed the founder request: "{request["title"]}".',
-            orchestration_id=orchestration_id,
-        )
+        if updated.rowcount == 1:
+            connection.execute(
+                "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+                (now,),
+            )
+            add_event(
+                connection, "ceo", None, "orchestration_completed",
+                f'CEO completed the founder request: "{request["title"]}".',
+                orchestration_id=orchestration_id,
+            )
+        else:
+            connection.execute(
+                "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+                (now,),
+            )
+            connection.execute(
+                """UPDATE orchestrations SET status='cancelled', stage='cancelled',
+                error='Founder cancelled the CEO request.', updated_at=?, completed_at=? WHERE id=?""",
+                (now, now, orchestration_id),
+            )
+            add_event(
+                connection, "ceo", None, "orchestration_cancelled",
+                "CEO request cancelled by the founder.",
+                orchestration_id=orchestration_id,
+            )
         connection.commit()
 
 

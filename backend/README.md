@@ -80,6 +80,8 @@ This is bounded lexical retrieval, not a complete semantic index. It does not gr
 ## What works in this phase
 
 - Real, persistent five-agent roster.
+- CEO requests, JSON plans, specialist task handoffs and consolidated reports.
+- Specialist delegation limited to Developer, Designer, Researcher and Tester.
 - Create a mission and assign it to an agent.
 - Queue, run, complete and fail mission states.
 - Per-agent and global event history.
@@ -88,6 +90,22 @@ This is bounded lexical retrieval, not a complete semantic index. It does not gr
 - Retry failed/cancelled missions.
 - View the current result and task progress in the workspace.
 - See API, worker heartbeat, Ollama connection, installed models and selected model.
+
+## CEO orchestration
+
+Select SINC CEO in the 3D office and submit a founder request. The local CEO worker then:
+
+1. Reads the same bounded, read-only workspace snapshot.
+2. Produces a JSON plan with one to four specialist missions.
+3. Validates that every delegated agent is one of Developer, Designer, Researcher or Tester.
+4. Persists the plan and specialist tasks in SQLite.
+5. Executes specialist tasks sequentially through the local Ollama worker (one model request at a time).
+6. Waits for all specialist tasks to reach a terminal state.
+7. Synthesizes the actual specialist results into a CEO report.
+
+The Mission Board shows CEO orchestration stage, specialist assignments, task progress, cancellation and the consolidated report. CEO requests, plans, child missions and events survive restarts. If the worker restarts during planning or synthesis, the stage is retried; interrupted specialist missions are safely requeued unless cancellation was requested.
+
+This is sequential coordination, not parallel model execution. It does not create independent always-running model processes for each character. All specialist work shares the selected local Ollama model and the one local worker.
 
 ## Honest capability boundary
 

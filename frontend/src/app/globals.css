@@ -586,3 +586,46 @@ html, body { background: #EEF2F6; color: #1D2939; }
   .agent-control-row { flex-wrap: wrap; }
   .runtime-health-card { gap: 8px; }
 }
+
+
+/* CEO orchestration board */
+.orchestration-children {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 9px;
+  border: 1px solid rgba(100,116,139,.14);
+  border-radius: 8px;
+  background: #F8FAFC;
+}
+.orchestration-child {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(100,116,139,.1);
+}
+.orchestration-child:last-child { border-bottom: 0; }
+.orchestration-child > span {
+  color: #344256;
+  font-size: 7px;
+  font-weight: 800;
+}
+.orchestration-child > small {
+  overflow: hidden;
+  color: #718096;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orchestration-child > b {
+  font-size: 6px;
+  text-transform: uppercase;
+}
+.mission-status.status-queued { color: #2563EB; }
+.mission-status.status-running { color: #0F766E; }
+.mission-status.status-completed { color: #15803D; }
+.mission-status.status-failed { color: #DC2626; }
+.mission-status.status-cancelled { color: #64748B; }

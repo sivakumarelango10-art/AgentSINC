@@ -89,9 +89,25 @@ Acceptance:
 
 Remaining: human-reviewed file patch proposals and apply-after-approval workflow are separate follow-up work. No shell or write tool is granted in this phase.
 
-## Phase 4B — CEO orchestration and specialist handoffs
+## Phase 4B — CEO orchestration and specialist handoffs (in progress)
 
 **Goal:** make the CEO agent plan work and delegate explicit sub-missions to specialists.
+
+Implemented on the Phase 4B branch:
+- Durable CEO orchestration records separate from individual specialist task records.
+- CEO plans generated as JSON and validated before dispatch.
+- Delegation allowlist restricted to Developer, Designer, Researcher and Tester; maximum four specialist tasks per founder request.
+- Specialist missions are persisted atomically and executed sequentially by the one local Ollama worker.
+- CEO waits for specialist terminal results and produces one consolidated founder-facing report.
+- Orchestration detail, child missions, stage, progress, result and cancellation are visible on the Mission Board.
+- Cancellation propagates to queued/running child tasks; worker restart recovery preserves cancellation and resumes incomplete work safely.
+- API and UI route requests submitted to SINC CEO into orchestration, while direct specialist missions keep their existing workflow.
+
+Still outstanding:
+- Verify a complete CEO → specialists → CEO cycle on Elango's Windows computer using qwen3:4b.
+- Exercise cancellation, agent pause, model timeout and worker restart cases against the local SQLite database.
+- Measure prompt/context size and mission duration on the actual computer.
+- Add conversation threads and richer agent-to-agent message records after the sequential handoff workflow is verified.
 
 Deliverables:
 - Provider adapter contract with development and production configuration.
