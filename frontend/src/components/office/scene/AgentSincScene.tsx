@@ -4,7 +4,7 @@ import { Html, OrbitControls } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import type { OfficeAgent } from "../types";
+import { STATUS_LABELS, type OfficeAgent } from "../types";
 
 type Palette = {
   label: string;
