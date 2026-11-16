@@ -279,51 +279,63 @@ def _recover_interrupted_missions() -> None:
         connection.commit()
 
 
+async def _keep_heartbeat_fresh() -> None:
+    while True:
+        _heartbeat("running")
+        await asyncio.sleep(3)
+
+
 async def run_worker() -> None:
     _recover_interrupted_missions()
     poll = max(0.5, POLL_SECONDS)
-    _heartbeat("running")
+    heartbeat_task = asyncio.create_task(_keep_heartbeat_fresh(), name="agentsinc-heartbeat")
     print("AgentSINC local worker is running. Waiting for Ollama and queued missions.", flush=True)
-    async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.5)) as client:
-        models: list[str] = []
-        last_model_check = 0.0
-        while True:
-            _heartbeat("running")
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.5)) as client:
+            models: list[str] = []
+            last_model_check = 0.0
+            while True:
             now = asyncio.get_running_loop().time()
-            if now - last_model_check >= 10 or not models:
-                last_model_check = now
+                if now - last_model_check >= 10 or not models:
+                    last_model_check = now
+                    try:
+                        models = await _get_models(client)
+                        set_runtime_value("ollama_state", "online")
+                        set_runtime_value("ollama_models", json.dumps(models))
+                    except (httpx.HTTPError, ValueError):
+                        models = []
+                        set_runtime_value("ollama_state", "offline")
+                        set_runtime_value("ollama_models", "[]")
+                model = _choose_model(models)
+                if not model:
+                    await asyncio.sleep(5)
+                    continue
+                task = _claim_next_task()
+                if not task:
+                    await asyncio.sleep(poll)
+                    continue
                 try:
-                    models = await _get_models(client)
-                    set_runtime_value("ollama_state", "online")
-                    set_runtime_value("ollama_models", json.dumps(models))
-                except (httpx.HTTPError, ValueError):
-                    models = []
-                    set_runtime_value("ollama_state", "offline")
-                    set_runtime_value("ollama_models", "[]")
-            model = _choose_model(models)
-            if not model:
-                await asyncio.sleep(5)
-                continue
-            task = _claim_next_task()
-            if not task:
-                await asyncio.sleep(poll)
-                continue
-            try:
-                print(f'Running mission {task["id"]} with {model}', flush=True)
-                result = await _run_ollama_task(client, task, model)
-                if _cancel_requested(task["id"]):
+                    print(f'Running mission {task["id"]} with {model}', flush=True)
+                    result = await _run_ollama_task(client, task, model)
+                    if _cancel_requested(task["id"]):
+                        _cancel_task(task, "Mission cancelled by the founder.")
+                    else:
+                        _finish_task(task, result)
+                        print(f'Mission completed: {task["id"]}', flush=True)
+                except MissionCancelled:
                     _cancel_task(task, "Mission cancelled by the founder.")
-                else:
-                    _finish_task(task, result)
-                    print(f'Mission completed: {task["id"]}', flush=True)
-            except MissionCancelled:
-                _cancel_task(task, "Mission cancelled by the founder.")
-            except (httpx.HTTPError, RuntimeError, ValueError) as exc:
-                _fail_task(task, f"Local model error: {exc}")
-                print(f'Mission failed: {task["id"]}: {exc}', flush=True)
-            except Exception as exc:
-                _fail_task(task, f"Unexpected worker error: {type(exc).__name__}: {exc}")
-                print(f'Unexpected mission error: {exc}', flush=True)
+                except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+                    _fail_task(task, f"Local model error: {exc}")
+                    print(f'Mission failed: {task["id"]}: {exc}', flush=True)
+                except Exception as exc:
+                    _fail_task(task, f"Unexpected worker error: {type(exc).__name__}: {exc}")
+                    print(f'Unexpected mission error: {exc}', flush=True)
+    finally:
+        heartbeat_task.cancel()
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
 
 
 def main() -> None:
