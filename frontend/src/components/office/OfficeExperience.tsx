@@ -968,7 +968,7 @@ function SettingsPanel({
           <span className={runtime.google_search_enabled ? "health-chip ready" : "health-chip"}>{runtime.google_search_enabled ? "ENABLED" : "DISABLED"}</span>
         </div>
         <p className="runtime-feature-copy">Only the Research Agent can request optional Google Search-grounded context. The local workspace snapshot and local memory are not sent to Google by this integration.</p>
-        <small>Enable it in backend/.env with AGENTSINC_GOOGLE_SEARCH_ENABLED=true and GEMINI_API_KEY. Google free-tier limits and data handling can change.</small>
+        <small>Enable in backend/.env with AGENTSINC_GOOGLE_SEARCH_ENABLED=true and GEMINI_API_KEY. Gemini 2.5 access may be restricted for new projects; free-tier prompts may be used to improve Google products. Never send confidential data.</small>
       </div>
       <div className="setting-block">
         <span>WORKER HEARTBEAT</span>
