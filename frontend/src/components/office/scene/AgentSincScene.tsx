@@ -82,6 +82,7 @@ export function AgentSincScene({
           size={room.size}
           color={room.color}
           agent={agents.find((agent) => agent.id === room.agentId)}
+          teamLead={agents.find((agent) => agent.id === "team_lead")}
           focused={focusedRoom === room.id}
         />
       ))}
@@ -259,6 +260,7 @@ function OfficeZone({
   color,
   focused,
   agent,
+  teamLead,
 }: {
   label: string;
   position: [number, number];
@@ -266,6 +268,7 @@ function OfficeZone({
   color: string;
   focused: boolean;
   agent?: OfficeAgent;
+  teamLead?: OfficeAgent;
 }) {
   const [x, z] = position;
   const [width, depth] = size;
@@ -305,7 +308,7 @@ function OfficeZone({
       </Html>
       <WorkDesk color={color} agent={agent} />
       {label.includes("COMMAND") ? (
-        <WorkDesk color="#0F9D91" position={[2.05, 0, -0.65]} agent={undefined} />
+        <WorkDesk color="#0F9D91" position={[2.05, 0, -0.65]} agent={teamLead} />
       ) : null}
       {label.includes("RESEARCH") ? <BookShelf position={[-1.75, 0, -0.2]} /> : null}
       {label.includes("QUALITY") ? <TestBench position={[1.65, 0, -0.2]} color={color} /> : null}
@@ -479,34 +482,113 @@ function CentralCommandHub({ accent, secondary }: { accent: string; secondary: s
 }
 
 function GlassMeetingRoom({ accent }: { accent: string }) {
+  const seats = [
+    { position: [0, 0, -1.15] as [number, number, number], rotation: 0 },
+    { position: [0, 0, 1.15] as [number, number, number], rotation: Math.PI },
+    { position: [-1.6, 0, 0] as [number, number, number], rotation: Math.PI / 2 },
+    { position: [1.6, 0, 0] as [number, number, number], rotation: -Math.PI / 2 },
+  ];
   return (
     <group position={[0, 0, 4.15]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <planeGeometry args={[4.3, 2.1]} />
-        <meshStandardMaterial color="#60738F" transparent opacity={0.15} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]} receiveShadow>
+        <planeGeometry args={[4.7, 2.9]} />
+        <meshPhysicalMaterial color="#DCE7F2" roughness={0.48} metalness={0.05} />
       </mesh>
-      {[-2.12, 2.12].map((x) => (
-        <mesh key={x} position={[x, 1.0, 0]}>
-          <boxGeometry args={[0.06, 1.9, 2.1]} />
-          <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.12} roughness={0.1} />
+      {[-2.3, 2.3].map((x) => (
+        <mesh key={x} position={[x, 1.08, 0]}>
+          <boxGeometry args={[0.065, 2.05, 2.85]} />
+          <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.2} roughness={0.08} transmission={0.42} />
         </mesh>
       ))}
-      <mesh position={[0, 0.08, -1.02]}>
-        <boxGeometry args={[4.2, 0.08, 0.07]} />
-        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.4} />
+      <mesh position={[0, 1.08, -1.42]}>
+        <boxGeometry args={[4.65, 2.05, 0.065]} />
+        <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.2} roughness={0.08} transmission={0.42} />
       </mesh>
-      <mesh position={[0, 0.48, 0]}>
-        <cylinderGeometry args={[0.78, 0.86, 0.16, 8]} />
-        <meshStandardMaterial color="#34435F" metalness={0.3} />
+      <mesh position={[0, 0.08, -1.42]}>
+        <boxGeometry args={[4.6, 0.08, 0.08]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.32} />
       </mesh>
-      {[-1.35, 1.35].map((x) => (
-        <mesh key={x} position={[x, 0.32, 0]}>
-          <cylinderGeometry args={[0.24, 0.24, 0.55, 10]} />
-          <meshStandardMaterial color="#34435F" />
+      <mesh position={[0, 0.78, 0]}>
+        <cylinderGeometry args={[1.02, 1.1, 0.16, 12]} />
+        <meshPhysicalMaterial color="#B9C5D4" roughness={0.3} metalness={0.18} clearcoat={0.45} />
+      </mesh>
+      {seats.map((seat, index) => (
+        <group key={index} position={seat.position} rotation={[0, seat.rotation, 0]}>
+          <OfficeChair color={accent} position={[0, 0, 0]} />
+        </group>
+      ))}
+      <Html position={[0, 2.35, -1.48]} center distanceFactor={8} style={{ pointerEvents: "none" }}>
+        <div className="scene-room-sign">DISCUSSION ROOM · 04 SEATS</div>
+      </Html>
+    </group>
+  );
+}
+
+function ConferenceRoom({ accent, secondary }: { accent: string; secondary: string }) {
+  const sideSeats = [-1.8, 0, 1.8];
+  return (
+    <group position={[0, 0, 7.6]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]} receiveShadow>
+        <planeGeometry args={[6.5, 4.55]} />
+        <meshPhysicalMaterial color="#E8EEF5" roughness={0.4} metalness={0.06} />
+      </mesh>
+      <mesh position={[-3.2, 1.62, 0]}>
+        <boxGeometry args={[0.07, 3.15, 4.45]} />
+        <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.19} roughness={0.08} transmission={0.48} />
+      </mesh>
+      <mesh position={[3.2, 1.62, 0]}>
+        <boxGeometry args={[0.07, 3.15, 4.45]} />
+        <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.19} roughness={0.08} transmission={0.48} />
+      </mesh>
+      <mesh position={[0, 1.62, -2.22]}>
+        <boxGeometry args={[6.45, 3.15, 0.07]} />
+        <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.19} roughness={0.08} transmission={0.48} />
+      </mesh>
+      {[-2.1, 2.1].map((x) => (
+        <mesh key={x} position={[x, 1.62, 2.22]}>
+          <boxGeometry args={[2.25, 3.15, 0.07]} />
+          <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.19} roughness={0.08} transmission={0.48} />
         </mesh>
       ))}
-      <Html position={[0, 2.15, -1.1]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
-        <div className="scene-room-sign">COLLABORATION LOUNGE</div>
+      {[[-3.2, -2.2], [3.2, -2.2], [-3.2, 2.2], [3.2, 2.2]].map(([x, z], index) => (
+        <mesh key={index} position={[x, 1.62, z]}>
+          <boxGeometry args={[0.12, 3.2, 0.12]} />
+          <meshStandardMaterial color="#93A5BB" metalness={0.62} roughness={0.26} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.81, 0]}>
+        <boxGeometry args={[5.0, 0.16, 1.35]} />
+        <meshPhysicalMaterial color="#9E795C" roughness={0.36} metalness={0.03} clearcoat={0.24} />
+      </mesh>
+      <mesh position={[0, 0.91, 0]}>
+        <boxGeometry args={[4.55, 0.035, 1.08]} />
+        <meshStandardMaterial color="#D8C4AE" roughness={0.55} />
+      </mesh>
+      {sideSeats.map((x) => (
+        <group key={"north-" + x} position={[x, 0, -1.35]}>
+          <OfficeChair color={secondary} position={[0, 0, 0]} />
+        </group>
+      ))}
+      {sideSeats.map((x) => (
+        <group key={"south-" + x} position={[x, 0, 1.35]} rotation={[0, Math.PI, 0]}>
+          <OfficeChair color={secondary} position={[0, 0, 0]} />
+        </group>
+      ))}
+      {[{ x: -2.68, rotation: Math.PI / 2 }, { x: 2.68, rotation: -Math.PI / 2 }].map((seat) => (
+        <group key={seat.x} position={[seat.x, 0, 0]} rotation={[0, seat.rotation, 0]}>
+          <OfficeChair color={secondary} position={[0, 0, 0]} />
+        </group>
+      ))}
+      <mesh position={[0, 1.95, -2.13]}>
+        <boxGeometry args={[2.4, 1.1, 0.08]} />
+        <meshPhysicalMaterial color="#25364D" metalness={0.32} roughness={0.2} clearcoat={0.65} />
+      </mesh>
+      <mesh position={[0, 1.95, -2.075]}>
+        <planeGeometry args={[2.16, 0.86]} />
+        <meshBasicMaterial color={accent} />
+      </mesh>
+      <Html position={[0, 2.8, -2.24]} center distanceFactor={8} style={{ pointerEvents: "none" }}>
+        <div className="scene-room-sign">SINC MEETING ROOM · 08 SEATS</div>
       </Html>
     </group>
   );
