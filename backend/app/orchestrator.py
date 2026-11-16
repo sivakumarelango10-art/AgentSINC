@@ -227,6 +227,14 @@ async def _plan(
     now = utc_now()
     with connect() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        parent = connection.execute(
+            "SELECT cancel_requested FROM orchestrations WHERE id=?",
+            (orchestration_id,),
+        ).fetchone()
+        if not parent or parent["cancel_requested"]:
+            connection.rollback()
+            _cancel(orchestration_id, "Founder cancelled the request before specialist delegation.")
+            return
         existing = connection.execute(
             "SELECT COUNT(*) FROM tasks WHERE orchestration_id=?", (orchestration_id,)
         ).fetchone()[0]
@@ -247,11 +255,15 @@ async def _plan(
                 _fail(orchestration_id, f"{agent['name']} is paused. Resume the agent and retry.")
                 return
 
-        connection.execute(
+        updated = connection.execute(
             """UPDATE orchestrations SET status='running', stage='executing',
             plan_json=?, updated_at=? WHERE id=? AND cancel_requested=0""",
             (json.dumps(plan), now, orchestration_id),
         )
+        if updated.rowcount != 1:
+            connection.rollback()
+            _cancel(orchestration_id, "Founder cancelled the request before specialist delegation.")
+            return
         from uuid import uuid4
         for item in plan["tasks"]:
             task_id = str(uuid4())
