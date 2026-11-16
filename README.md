@@ -7,8 +7,9 @@ AgentSINC is being built from scratch as SINC's own product. It is not a Hermes3
 ## Product vision
 
 - A custom 3D office and original AgentSINC visual identity.
-- A CEO / orchestrator agent that can plan work and delegate to specialist agents.
-- Developer, Designer, Researcher and Tester agents with clear responsibilities.
+- A founder-facing CEO and an execution-focused Team Lead that plans work and delegates specialist missions.
+- Developer, Designer, Researcher and QA agents with clear responsibilities.
+- An explorable white-first 3D office with correctly oriented workstations, live desk status, a discussion room and a conference room.
 - Human-readable task boards, conversations, approvals, execution history and audit trails.
 - A reliable always-on API and worker process, with durable database-backed state.
 - Human approval before privileged or irreversible actions.
@@ -53,4 +54,4 @@ The exact implementation will be locked in Phase 1 after the repository and depl
 
 See [docs/PHASES.md](docs/PHASES.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SECURITY.md](docs/SECURITY.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-**Current status:** Repository bootstrap. Phase 1 foundation is being prepared.
+**Current status:** Local-first runtime and original 3D office prototype are implemented in the working branch. Team Lead coordination, optional Google-grounded research and bounded local learning memory are being added behind a reviewable pull request. Production authentication, isolated code execution, multi-user data infrastructure and guaranteed 24/7 hosting remain future work.
