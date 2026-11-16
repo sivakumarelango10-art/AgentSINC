@@ -547,7 +547,7 @@ function AgentPanel({
   busyAction: string;
   notice: string;
 }) {
-  const isPaused = selectedAgent.status === "paused";
+  const isPaused = selectedAgent.paused === true || selectedAgent.status === "paused";
   const latestEvents = events.slice(0, 7);
   return (
     <div className="panel-content">
