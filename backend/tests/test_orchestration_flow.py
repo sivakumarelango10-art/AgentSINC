@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from uuid import uuid4
 
 import httpx
 
@@ -240,11 +241,8 @@ Review tests, reliability and security boundaries.
 """
     parent = create_orchestration("Production readiness audit", instructions)
     for agent_id in ("developer", "designer", "tester"):
-        task = orchestrator.create_task if hasattr(orchestrator, "create_task") else None
-        assert task is None  # Child rows are inserted below with their parent ID.
         with connect() as connection:
-            import uuid
-            task_id = str(uuid.uuid4())
+            task_id = str(uuid4())
             now = "2026-11-16T00:00:00+00:00"
             title = f"{agent_id} audit report"
             connection.execute(
@@ -269,7 +267,7 @@ Review tests, reliability and security boundaries.
         payload = json.loads(http_request.content)
         captured["user"] = payload["messages"][1]["content"]
         line = json.dumps({
-            "message": {"content": "## Final audit\\nCompleted three reviews.\\n<think>do not expose</think>"},
+            "message": {"content": "## Final audit\nCompleted three reviews.\n<think>do not expose</think>"},
             "done": True,
         }) + "\n"
         return httpx.Response(200, content=line.encode(), headers={"content-type": "application/x-ndjson"})
