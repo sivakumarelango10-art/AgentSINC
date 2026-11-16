@@ -186,6 +186,12 @@ def create_app() -> FastAPI:
                 (now, now, orchestration_id),
             )
             connection.execute(
+                """UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END,
+                updated_at=? WHERE current_task_id IS NULL
+                AND id IN (SELECT agent_id FROM tasks WHERE orchestration_id=? AND status='cancelled')""",
+                (now, orchestration_id),
+            )
+            connection.execute(
                 """UPDATE tasks SET cancel_requested=1, updated_at=?
                 WHERE orchestration_id=? AND status='running'""",
                 (now, orchestration_id),
