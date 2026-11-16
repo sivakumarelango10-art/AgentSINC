@@ -1,74 +1,77 @@
-# Original AgentSINC 3D office concept
+# AgentSINC original 3D office design
 
 ## Design intent
 
-Create a distinctive virtual SINC headquarters that makes agent activity understandable at a glance. This is a new scene and design system, not a copy of Hermes3D or another virtual office.
+The 3D headquarters is the primary product experience, not a small widget inside an admin dashboard. The office should feel like an explorable, living digital workplace while keeping real tasks, status and approvals in accessible overlay panels.
 
-The uploaded SINC team screenshots are visual references for the people and roles, not an instruction to place personal portraits directly on AI agent characters. Human team members and AI agent avatars should be separate concepts in the product.
+This is a new AgentSINC scene and design system. Do not copy or import Hermes3D code, assets, rooms or UI.
 
 ## Spatial layout
 
-The first prototype should use one compact, readable floor:
+The first floor is a custom open-plan technology studio:
 
-1. **Reception / Lobby** — SINC identity, system pulse and entry point.
-2. **CEO / Command Hub** — central orchestration desk with active tasks and team overview.
-3. **Development Studio** — developer agents, code/review desks and build status.
-4. **Design Studio** — design agents, moodboards and review workspace.
-5. **Research Library** — research agents, source collections and evidence status.
-6. **QA Lab** — tester agents, test runs, defects and release gates.
-7. **Collaboration Room** — agents and human teammates can meet around a shared task.
-8. **Quiet / Idle Zone** — agents without active work remain visibly idle rather than pretending to be busy.
+1. **SINC Command Hub** — central octagonal operations table and CEO agent.
+2. **Development Studio** — workstation, glass divider and build display.
+3. **Design Studio** — visual review/moodboard wall and designer workstation.
+4. **Research Library** — research desk and book/archive shelving.
+5. **Quality Lab** — test bench and QA workstation.
+6. **Collaboration Lounge** — glass meeting room with shared table.
+7. **Reception / Identity Wall** — branded entry feature and SINC visual identity.
+8. **Perimeter planting and lighting** — adds depth, scale and a softer office atmosphere.
 
-Rooms are navigational metaphors. Task and agent records remain in the API/database, not in the 3D scene graph.
+Rooms are 3D navigation metaphors. Tasks, agent identities and activity remain server-owned data once the API is integrated.
+
+## Interaction model
+
+- Full-window 3D scene occupies the background and remains the primary visual focus.
+- Floating top bar shows brand, office/floor context and runtime mode.
+- Compact icon rail opens Agents, Missions, Activity, People, Approvals and Studio panels.
+- Room dock focuses the camera on Command, Development, Design, Research or Quality zones.
+- Agent selection in the 3D scene synchronizes with the agent inspector and specialist roster.
+- 2D floor-map mode gives a lighter alternative and must provide a working return-to-3D action.
+- Orbit, pan and zoom are constrained to avoid losing the floor.
+
+## Visual language
+
+The current design is a cinematic dark digital office:
+- Layered glass surfaces and subtle borders for overlays.
+- Warm, controlled light, deep blue structural materials and room-specific accent strips.
+- Floating room and agent labels that remain legible over the scene.
+- Brand theme can switch between cyan/violet, ember and indigo/lime.
+- Avoid a dense traditional admin sidebar, multi-card dashboard grid, large blank margins or a tiny 3D viewport.
 
 ## Character system
 
-AI agents use original stylized avatars with consistent proportions and role-specific accents. Human users have profile cards and may later opt into portrait uploads.
+AI agents use original stylized low-poly characters with role-specific colors. Visual states:
+- Idle
+- Working
+- Thinking
+- Collaborating
+- Waiting for approval
 
-Agent visual states:
-- Idle — at desk or in the quiet zone.
-- Walking — moving to a destination.
-- Working — seated/standing at a workstation with subtle activity animation.
-- Collaborating — present in the collaboration room.
-- Waiting for approval — clearly marked, no false claim of progress.
-- Offline / unavailable — dimmed or shown in the roster rather than animated as active.
+Agent animations are driven by state data. Never animate a completed status when the backend has not confirmed completion.
 
-Animations are driven by persisted server state and transient presentation events. The scene must never generate a fake task completion state.
+## Asset and performance rules
 
-## Navigation and interaction
+- Keep the logo assets inside `frontend/public/brand/` so Next.js can serve them.
+- Use original Three.js geometry or properly licensed custom models.
+- Lazy-load the WebGL scene.
+- Use adaptive pixel ratio and quality presets.
+- Keep the 2D floor map and accessible panels usable without WebGL.
+- Respect reduced-motion preferences.
+- Profile the final scene on desktop and mobile before production deployment.
 
-- Orbit, pan and zoom camera on desktop.
-- Click or tap an agent to open an accessible detail panel.
-- Click a room to focus the camera and show that department's queue.
-- Provide keyboard navigation and a 2D list/room map alternative.
-- Keep chat, task assignment and approvals in normal semantic UI panels.
-- Make the 3D scene lazy-loaded so the dashboard shell remains fast.
+## Current prototype status
 
-## Visual direction
+Implemented in the Phase 2 branch:
+- Full-window 3D viewport and original office environment.
+- Command hub, glass meeting room, specialist departments, desks, shelves, test bench, moodboard, plants and branded reception wall.
+- Stylized selectable agent characters.
+- Room-focused orbit targets.
+- Floating workspace UI, panel rail, agent/mission/activity/team/approval/settings panels and 2D floor map.
 
-The logo source currently offers three themes:
-- Cyan + Violet
-- Ember
-- Indigo + Lime
-
-Do not hard-code the whole UI to one palette before the team chooses. Use semantic design tokens for background, surface, text, accent, status and department colors.
-
-The office should use a controlled material system, readable labels and lighting that does not hide important state indicators. Avoid excessive bloom, post-processing or tiny text floating in 3D.
-
-## Performance targets for Phase 2
-
-These are prototype targets to measure:
-- Desktop: aim for smooth 60 FPS on a mid-range integrated/discrete GPU.
-- Mobile: aim for a stable 30 FPS mode with reduced shadows and effects.
-- Load the office only when the user opens it.
-- Use instancing and level-of-detail for repeated furniture/props.
-- Keep critical workflows available in 2D if WebGL is unavailable or reduced motion is preferred.
-
-## Phase 2 acceptance
-
-- Original scene built with Three.js / React Three Fiber.
-- No copied Hermes3D scene, models, code or product UI.
-- Room navigation and agent selection work with sample data.
-- Agent visual states are driven by typed data/state mapping.
-- Responsive fallback, keyboard path and reduced-motion path exist.
-- Performance is profiled and documented on at least one desktop and one mobile-class device.
+Not yet implemented:
+- Persistent camera presets and movement animations between rooms.
+- Human team avatars in the scene.
+- Live API-driven agent state, tasks and activity.
+- Production authentication, 24/7 backend/worker, database and monitoring.
