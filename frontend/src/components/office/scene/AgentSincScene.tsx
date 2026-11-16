@@ -280,7 +280,7 @@ function AgentAvatar({
   };
 
   return (
-    <group position={agent.position} onClick={handleSelect} ref={groupRef}>
+    <group position={[agent.position[0], 0, agent.position[2] + 1.1]} onClick={handleSelect} ref={groupRef}>
       {selected ? (
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
           <torusGeometry args={[0.62, 0.045, 8, 36]} />
