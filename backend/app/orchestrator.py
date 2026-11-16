@@ -342,6 +342,10 @@ def _claim_synthesis() -> dict[str, Any] | None:
                 error='Founder cancelled the CEO request.', updated_at=?, completed_at=? WHERE id=?""",
                 (now, now, row["id"]),
             )
+            connection.execute(
+                "UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'idle' END, updated_at=? WHERE id='ceo'",
+                (now,),
+            )
             add_event(
                 connection, "ceo", None, "orchestration_cancelled",
                 "CEO request cancelled by the founder.",
