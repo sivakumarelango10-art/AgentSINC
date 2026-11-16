@@ -23,11 +23,11 @@ type SceneProps = {
 };
 
 const roomLayout = [
-  { id: "command", label: "COMMAND HUB", position: [0, -4.5] as [number, number], size: [5.6, 3.8] as [number, number], color: "#8B5CF6" },
-  { id: "development", label: "DEVELOPMENT STUDIO", position: [-6.3, -0.9] as [number, number], size: [5.1, 3.8] as [number, number], color: "#0EA5E9" },
-  { id: "design", label: "DESIGN STUDIO", position: [6.3, -0.9] as [number, number], size: [5.1, 3.8] as [number, number], color: "#EC4899" },
-  { id: "research", label: "RESEARCH LIBRARY", position: [-6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#D97706" },
-  { id: "quality", label: "QUALITY LAB", position: [6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#16A34A" },
+  { id: "command", label: "COMMAND HUB", agentId: "ceo", position: [0, -4.5] as [number, number], size: [7.2, 5.4] as [number, number], color: "#8B5CF6" },
+  { id: "development", label: "DEVELOPMENT STUDIO", agentId: "developer", position: [-6.3, -0.9] as [number, number], size: [5.1, 3.8] as [number, number], color: "#0EA5E9" },
+  { id: "design", label: "DESIGN STUDIO", agentId: "designer", position: [6.3, -0.9] as [number, number], size: [5.1, 3.8] as [number, number], color: "#EC4899" },
+  { id: "research", label: "RESEARCH LIBRARY", agentId: "researcher", position: [-6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#D97706" },
+  { id: "quality", label: "QUALITY LAB", agentId: "tester", position: [6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#16A34A" },
 ];
 
 const roomTargets: Record<string, [number, number, number]> = {
@@ -37,6 +37,8 @@ const roomTargets: Record<string, [number, number, number]> = {
   design: [6.3, 0.55, -0.9],
   research: [-6.3, 0.55, 4.25],
   quality: [6.3, 0.55, 4.25],
+  discussion: [0, 0.72, 4.15],
+  meeting: [0, 0.8, 7.55],
 };
 
 export function AgentSincScene({
@@ -79,12 +81,14 @@ export function AgentSincScene({
           position={room.position}
           size={room.size}
           color={room.color}
+          agent={agents.find((agent) => agent.id === room.agentId)}
           focused={focusedRoom === room.id}
         />
       ))}
 
       <CentralCommandHub accent={palette.accent} secondary={palette.secondary} />
       <GlassMeetingRoom accent={palette.secondary} />
+      <ConferenceRoom accent={palette.accent} secondary={palette.secondary} />
       <ReceptionArch accent={palette.secondary} />
       <CeilingLights accent={palette.accent} />
       <Plant position={[-10, 0, -6.8]} />
@@ -254,12 +258,14 @@ function OfficeZone({
   size,
   color,
   focused,
+  agent,
 }: {
   label: string;
   position: [number, number];
   size: [number, number];
   color: string;
   focused: boolean;
+  agent?: OfficeAgent;
 }) {
   const [x, z] = position;
   const [width, depth] = size;
@@ -292,12 +298,15 @@ function OfficeZone({
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
       </mesh>
       <GlassDivider color={color} width={width} depth={depth} />
-      <Html position={[0, 2.45, -depth / 2 + 0.45]} center distanceFactor={11} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.55, -depth / 2 + 0.45]} center distanceFactor={8} style={{ pointerEvents: "none" }}>
         <div className={focused ? "scene-zone-label focused" : "scene-zone-label"} style={{ "--zone-color": color } as React.CSSProperties}>
           <i />{label}
         </div>
       </Html>
-      <WorkDesk color={color} />
+      <WorkDesk color={color} agent={agent} />
+      {label.includes("COMMAND") ? (
+        <WorkDesk color="#0F9D91" position={[2.05, 0, -0.65]} agent={undefined} />
+      ) : null}
       {label.includes("RESEARCH") ? <BookShelf position={[-1.75, 0, -0.2]} /> : null}
       {label.includes("QUALITY") ? <TestBench position={[1.65, 0, -0.2]} color={color} /> : null}
       {label.includes("DESIGN") ? <MoodWall position={[1.6, 0, -1.2]} color={color} /> : null}
@@ -328,9 +337,17 @@ function GlassDivider({ color, width, depth }: { color: string; width: number; d
   );
 }
 
-function WorkDesk({ color }: { color: string }) {
+function WorkDesk({
+  color,
+  position = [0, 0, 0.2],
+  agent,
+}: {
+  color: string;
+  position?: [number, number, number];
+  agent?: OfficeAgent;
+}) {
   return (
-    <group position={[0, 0, 0.2]}>
+    <group position={position}>
       <mesh castShadow receiveShadow position={[0, 0.78, -0.35]}>
         <boxGeometry args={[1.9, 0.16, 0.9]} />
         <meshPhysicalMaterial color="#B98555" roughness={0.42} metalness={0.02} clearcoat={0.2} clearcoatRoughness={0.34} />
@@ -345,14 +362,22 @@ function WorkDesk({ color }: { color: string }) {
           <meshStandardMaterial color="#AEB8C4" metalness={0.72} roughness={0.27} />
         </mesh>
       )))}
-      <mesh position={[0, 1.2, -0.65]} castShadow>
-        <boxGeometry args={[1.05, 0.66, 0.09]} />
-        <meshPhysicalMaterial color="#293344" metalness={0.58} roughness={0.19} clearcoat={0.8} />
+      <mesh position={[0, 1.32, -0.65]} castShadow>
+        <boxGeometry args={[1.12, 0.82, 0.09]} />
+        <meshPhysicalMaterial color="#202C3D" metalness={0.62} roughness={0.17} clearcoat={0.85} />
       </mesh>
-      <mesh position={[0, 1.2, -0.6]}>
-        <planeGeometry args={[0.9, 0.52]} />
-        <meshBasicMaterial color="#A5D8FF" />
+      <mesh position={[0, 1.32, -0.6]}>
+        <planeGeometry args={[0.98, 0.68]} />
+        <meshBasicMaterial color={agent?.status === "working" ? "#D9F7FF" : "#B9D7F2"} />
       </mesh>
+      <Html position={[0, 1.32, -0.545]} center transform distanceFactor={5} style={{ pointerEvents: "none" }}>
+        <div className="scene-monitor-ui">
+          <div className="scene-monitor-top"><i />SINC · LIVE DESK</div>
+          <strong>{agent ? STATUS_LABELS[agent.status].toUpperCase() : "AVAILABLE"}</strong>
+          <small>{agent?.currentTask && agent.currentTask !== "No active mission assigned" ? agent.currentTask : "READY FOR ASSIGNMENT"}</small>
+          <div className="scene-monitor-progress"><i style={{ width: String(agent?.progress ?? 0) + "%" }} /></div>
+        </div>
+      </Html>
       <mesh position={[0, 0.87, -0.59]}>
         <boxGeometry args={[0.1, 0.13, 0.11]} />
         <meshStandardMaterial color="#AAB4C0" metalness={0.68} roughness={0.28} />
@@ -658,6 +683,7 @@ function AgentAvatar({
   return (
     <group
       position={[agent.position[0], 0, agent.position[2] + 1.1]}
+      rotation={[0, Math.PI, 0]}
       onClick={handleSelect}
       ref={groupRef}
     >
@@ -798,7 +824,7 @@ function AgentAvatar({
         </mesh>
       </group>
 
-      <Html position={[0, 2.18, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.18, 0]} center distanceFactor={8} style={{ pointerEvents: "none" }}>
         <div className={selected ? "scene-agent-tag selected" : "scene-agent-tag"} style={{ "--agent-color": agent.color } as React.CSSProperties}>
           <span>{agent.name}</span>
           <small>{STATUS_LABELS[agent.status]}</small>
