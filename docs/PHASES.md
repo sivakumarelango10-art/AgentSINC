@@ -191,3 +191,23 @@ The planner now:
 - Still rejects missing, empty, invalid or out-of-scope specialist task lists.
 
 Regression coverage verifies schema usage, Qwen thinking configuration, missing-summary recovery, supported aliases, and rejection of invalid delegation. Existing sequential worker and human-controlled tool boundaries remain unchanged.
+
+
+## Local inference performance tuning — initial profile
+
+Hardware measured on the founder's laptop: Intel Core i7-11850H (8 cores / 16 logical processors), 31.67 GB RAM, NVIDIA RTX A2000 Laptop GPU with 4 GB VRAM. `ollama ps` reported Qwen 3 4B at 34% CPU / 66% GPU with a 4,096-token context. This confirms GPU acceleration is active but the model is split across CPU and GPU.
+
+Initial conservative tuning:
+- Keep the context at 4,096 tokens; do not increase it on this 4 GB VRAM GPU without a benchmark.
+- Reduce the workspace snapshot from 22,000 to 9,000 characters by default.
+- Cap specialist responses at 650 tokens, CEO plan at 850 and CEO synthesis at 900.
+- Disable Qwen 3 thinking mode for ordinary worker and orchestration responses.
+- Keep the model resident for 20 minutes between sequential stages.
+- Continue one worker / one generation at a time.
+- Capture Ollama prompt tokens, generated tokens, load seconds and generation tokens/second for the most recent completed specialist response; show them in Studio Settings.
+
+Acceptance:
+- Backend tests verify inference payload limits and generation telemetry.
+- Frontend typecheck and production build pass.
+- Run the same representative mission before and after on the founder's laptop and compare first-token latency, tokens/second, total elapsed time and report quality.
+- Keep the previous profile available for rollback if concise outputs omit important evidence.
