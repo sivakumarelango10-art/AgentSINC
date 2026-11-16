@@ -88,7 +88,7 @@ def test_ceo_plans_delegates_and_synthesizes_with_mock_ollama(tmp_path, monkeypa
     assert final["stage"] == "completed"
     assert final["result"] == "CEO consolidated release readiness report."
     assert seen_formats == [CEO_PLAN_SCHEMA, None]
-    assert seen_think_values == [False, None]
+    assert seen_think_values == [False, False]
 
 
 def test_qwen_plan_without_summary_derives_one_from_validated_tasks() -> None:
