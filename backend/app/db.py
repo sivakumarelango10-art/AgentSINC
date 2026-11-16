@@ -29,10 +29,18 @@ def database_path() -> Path:
     return Path(__file__).resolve().parents[1] / "data" / "agentsinc.sqlite3"
 
 
+class ClosingConnection(sqlite3.Connection):
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            return super().__exit__(exc_type, exc, tb)
+        finally:
+            self.close()
+
+
 def connect() -> sqlite3.Connection:
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(path, timeout=30, check_same_thread=False)
+    connection = sqlite3.connect(path, timeout=30, check_same_thread=False, factory=ClosingConnection)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.execute("PRAGMA busy_timeout = 30000")
