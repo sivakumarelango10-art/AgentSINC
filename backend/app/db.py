@@ -212,8 +212,8 @@ def remember_completed_task(connection: sqlite3.Connection, task: dict[str, Any]
     )
     # Avoid persisting obvious credential assignments in the learning index.
     content = re.sub(
-        r"(?i)\\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)\\b\\s*[:=]\\s*([^\\s,;]+)",
-        r"\\1=[REDACTED]",
+        r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)\b\s*[:=]\s*["']?([^\s"',;]+)["']?",
+        r"\1=[REDACTED]",
         content,
     )
     connection.execute(
