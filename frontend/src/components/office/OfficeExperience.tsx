@@ -894,6 +894,20 @@ function SettingsPanel({
         <small>Local-only mode · no paid model API</small>
       </div>
 
+      {runtime.last_generation_metrics ? (
+        <div className="runtime-health-card">
+          <div className="runtime-health-head">
+            <strong>LAST MODEL RESPONSE</strong>
+            <span className="health-chip ready">{runtime.last_generation_metrics.model}</span>
+          </div>
+          <div className="health-row"><i className="health-dot online" /><span>Generation speed</span><small>{runtime.last_generation_metrics.tokens_per_second === null ? "Unavailable" : `${runtime.last_generation_metrics.tokens_per_second} tokens/sec`}</small></div>
+          <div className="health-row"><i className="health-dot online" /><span>Generated tokens</span><small>{runtime.last_generation_metrics.generated_tokens}</small></div>
+          <div className="health-row"><i className="health-dot online" /><span>Prompt tokens</span><small>{runtime.last_generation_metrics.prompt_tokens}</small></div>
+          <div className="health-row"><i className="health-dot online" /><span>Model load time</span><small>{runtime.last_generation_metrics.load_seconds}s</small></div>
+          <small>Last completed specialist response · {runtime.last_generation_metrics.agent_id}</small>
+        </div>
+      ) : null}
+
       <div className="setting-block">
         <span>LOCAL MODEL</span>
         <strong>{runtime.selected_model ?? "No model selected"}</strong>
