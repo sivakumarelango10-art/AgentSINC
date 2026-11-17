@@ -9,22 +9,37 @@ os.environ["AGENTSINC_DB_PATH"] = str(Path("tests") / f"test-{uuid4().hex}.sqlit
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
-from app.db import set_runtime_value  # noqa: E402
+from app.db import add_event, connect, set_runtime_value  # noqa: E402
 
 
 client = TestClient(app)
 
 
-def test_overview_has_five_idle_agents_and_no_fake_tasks() -> None:
+def test_overview_has_six_idle_office_agents_and_no_fake_tasks() -> None:
     response = client.get("/api/v1/overview")
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload["agents"]) == 5
+    assert len(payload["agents"]) == 6
     assert {agent["id"] for agent in payload["agents"]} == {
-        "ceo", "developer", "designer", "researcher", "tester"
+        "ceo", "team_lead", "developer", "designer", "researcher", "tester"
     }
     assert all(agent["status"] == "idle" for agent in payload["agents"])
     assert payload["tasks"] == []
+    assert payload["runtime"]["memory_records"] == 0
+    assert "google_search_enabled" in payload["runtime"]
+
+
+def test_team_lead_cannot_receive_direct_task_outside_orchestration() -> None:
+    response = client.post(
+        "/api/v1/tasks",
+        json={
+            "agent_id": "team_lead",
+            "title": "Coordinate a release review",
+            "instructions": "Delegate research, design, development and QA reviews, then consolidate reports.",
+        },
+    )
+    assert response.status_code == 409
+    assert "orchestration" in response.json()["detail"].lower()
 
 
 def test_create_mission_persists_task_and_timeline_event() -> None:
@@ -181,3 +196,93 @@ def test_overview_exposes_latest_local_generation_metrics() -> None:
     assert metrics["model"] == "qwen3:4b"
     assert metrics["tokens_per_second"] == 40.0
     assert metrics["generated_tokens"] == 160
+
+
+
+def test_overview_exposes_backend_driven_team_lead_room_and_latest_activity() -> None:
+    created = client.post(
+        "/api/v1/orchestrations",
+        json={
+            "title": "Coordinate the office review",
+            "instructions": "Coordinate a review of the office scene and report specialist findings.",
+        },
+    )
+    assert created.status_code == 201
+    orchestration_id = created.json()["orchestration"]["id"]
+
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='running', stage='executing' WHERE id=?",
+            (orchestration_id,),
+        )
+        add_event(
+            connection,
+            "team_lead",
+            None,
+            "team_lead_location_changed",
+            "Team Lead moved to the discussion room for the specialist handoff.",
+            orchestration_id=orchestration_id,
+        )
+        connection.commit()
+
+    overview = client.get("/api/v1/overview")
+    assert overview.status_code == 200
+    lead = next(item for item in overview.json()["agents"] if item["id"] == "team_lead")
+    assert lead["location"] == "discussion"
+    assert lead["latestActivity"] == "Team Lead moved to the discussion room for the specialist handoff."
+
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET stage='synthesizing' WHERE id=?",
+            (orchestration_id,),
+        )
+        connection.commit()
+
+    next_overview = client.get("/api/v1/overview").json()
+    lead = next(item for item in next_overview["agents"] if item["id"] == "team_lead")
+    assert lead["location"] == "meeting"
+
+
+
+def test_agent_location_is_persisted_and_recorded_in_timeline() -> None:
+    moved = client.post(
+        "/api/v1/agents/developer/location",
+        json={"location": "meeting"},
+    )
+    assert moved.status_code == 200
+    assert moved.json()["location"] == "meeting"
+
+    overview = client.get("/api/v1/overview")
+    assert overview.status_code == 200
+    developer = next(item for item in overview.json()["agents"] if item["id"] == "developer")
+    assert developer["location"] == "meeting"
+    assert "sent to the meeting" in developer["latestActivity"]
+
+    invalid = client.post(
+        "/api/v1/agents/developer/location",
+        json={"location": "server-room"},
+    )
+    assert invalid.status_code == 422
+
+
+def test_team_lead_cannot_be_manually_moved_during_active_orchestration() -> None:
+    created = client.post(
+        "/api/v1/orchestrations",
+        json={
+            "title": "Active handoff",
+            "instructions": "Coordinate a short specialist handoff and consolidate the outcome.",
+        },
+    )
+    orchestration_id = created.json()["orchestration"]["id"]
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='running', stage='executing' WHERE id=?",
+            (orchestration_id,),
+        )
+        connection.commit()
+
+    response = client.post(
+        "/api/v1/agents/team_lead/location",
+        json={"location": "desk"},
+    )
+    assert response.status_code == 409

@@ -117,7 +117,7 @@ def test_qwen_plan_without_summary_derives_one_from_validated_tasks() -> None:
     )
 
     assert plan["summary"] == (
-        "CEO delegated specialist missions: Review backend API; "
+        "Team Lead delegated specialist missions: Review backend API; "
         "Prepare runtime test checklist"
     )
     assert len(plan["tasks"]) == 2

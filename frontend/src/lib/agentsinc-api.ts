@@ -71,6 +71,8 @@ export type RuntimeStatus = {
   zero_cost_mode: boolean;
   execution_mode: string;
   last_generation_metrics?: GenerationMetrics;
+  memory_records?: number;
+  google_search_enabled?: boolean;
 };
 
 export type WorkspaceSummary = {
@@ -174,5 +176,19 @@ export function chooseLocalModel(model: string): Promise<{ ok: boolean; selected
   return request("/api/v1/runtime/model", {
     method: "PATCH",
     body: JSON.stringify({ model }),
+  });
+}
+
+
+export type AgentLocation = "desk" | "command" | "discussion" | "meeting";
+
+export function moveAgent(agentId: string, location: AgentLocation): Promise<{
+  ok: boolean;
+  agent_id: string;
+  location: AgentLocation;
+}> {
+  return request(`/api/v1/agents/${encodeURIComponent(agentId)}/location`, {
+    method: "POST",
+    body: JSON.stringify({ location }),
   });
 }

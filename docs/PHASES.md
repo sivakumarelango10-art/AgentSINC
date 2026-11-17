@@ -173,6 +173,39 @@ Acceptance:
 - Agent behavior is observable and all privileged actions are approval-gated.
 - The owner explicitly approves production launch.
 
+## Phase 4B.3 — Team Lead, live office and grounded Research Agent (in progress)
+
+**Goal:** make the founder-facing CEO and execution Team Lead distinct, keep specialist reporting observable, and make research use real sources when explicitly enabled.
+
+Implemented on the `feat/real-agent-office-teamlead-memory` branch:
+- Add a persisted Team Lead coordinator agent and apply an additive SQLite seed migration for existing local databases.
+- Route orchestration planning, specialist dispatch and synthesis through Team Lead while retaining CEO as the founder-request interface.
+- Prevent ordinary direct task creation for Team Lead; it receives work through CEO orchestration only.
+- Orient agent avatars and their office chairs toward the workstation monitors and use seated leg poses.
+- Add live monitor panels driven by each agent's API status, current task and progress.
+- Add a four-seat glass Discussion Room and an enclosed eight-seat Meeting Room with camera navigation links.
+- Increase signage and agent-label contrast/size and add an accessible per-specialist View Report control on the Mission Board.
+- Save up to 500 bounded completed-mission memory records locally and retrieve up to three relevant snippets for later missions. Credential patterns are redacted before persistence.
+- Add optional Google Search grounding for the Research Agent through Gemini 2.5 Flash. It is disabled by default and transmits only the Research Agent's mission title/instructions when explicitly enabled.
+- Add regression tests for Team Lead migration, task-routing boundary, memory persistence/redaction and Google Search opt-in/response parsing.
+
+Still outstanding:
+- Run backend tests, frontend typecheck and production build on CI and the founder's Windows machine.
+- Inspect the scene in-browser at desktop and mobile breakpoints; verify monitor HTML scale and the seated pose visually.
+- Measure local memory usefulness and latency on the Qwen 3 4B setup.
+- Confirm Google AI Studio eligibility, current model/region availability and free-tier limits before enabling the external Research connector.
+- Build an isolated, approval-gated workspace for actual file edits/code execution. Specialist agents still provide evidence-based reports and code proposals; they cannot directly modify repository files or run commands.
+- Actual model-weight training/fine-tuning is not part of this phase. Local memory retrieval is the safe first step.
+
+Acceptance:
+- Existing local SQLite databases gain the Team Lead agent without overwriting existing agent settings.
+- CEO founder requests are planned and delegated by Team Lead to Developer, Designer, Researcher and Tester only.
+- Every specialist report is independently viewable from the Mission Board.
+- Agent avatars face their monitors; their screens and status tags reflect real API state.
+- Discussion and Meeting Rooms are reachable from the room dock and readable at normal zoom.
+- Google requests do not occur unless both explicit opt-in and a key are present; workspace files and local memory are not included in those requests.
+- Tests verify memory persistence and secret redaction; CI is green before merging.
+
 ## Working rule
 
 Finish and verify one phase before starting the next. A working screen is not proof that the API, database, worker, security controls or 24/7 operations are complete.

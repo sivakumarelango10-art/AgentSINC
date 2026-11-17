@@ -2,19 +2,23 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .redaction import redact_secrets
+
 
 AGENTS: list[dict[str, Any]] = [
-    {"id": "ceo", "name": "SINC CEO", "role": "Chief Orchestrator", "department": "Command Hub", "color": "#7C3AED", "model_profile": "Orchestrator", "position": [0, 0, -4.5]},
-    {"id": "developer", "name": "Dev Agent", "role": "Developer", "department": "Development Studio", "color": "#0EA5E9", "model_profile": "Code Specialist", "position": [-6.3, 0, -0.9]},
-    {"id": "designer", "name": "Design Agent", "role": "Designer", "department": "Design Studio", "color": "#EC4899", "model_profile": "Visual Specialist", "position": [6.3, 0, -0.9]},
-    {"id": "researcher", "name": "Research Agent", "role": "Researcher", "department": "Research Library", "color": "#D97706", "model_profile": "Research Specialist", "position": [-6.3, 0, 4.25]},
-    {"id": "tester", "name": "QA Agent", "role": "Tester", "department": "Quality Lab", "color": "#16A34A", "model_profile": "Quality Specialist", "position": [6.3, 0, 4.25]},
+    {"id": "ceo", "name": "SINC CEO", "role": "Founder Interface", "department": "Command Hub", "color": "#7C3AED", "model_profile": "Founder Liaison", "position": [0, 0, -4.5], "location": "command"},
+    {"id": "team_lead", "name": "Team Lead", "role": "Execution Coordinator", "department": "Command Hub", "color": "#0F9D91", "model_profile": "Mission Coordinator", "position": [2.05, 0, -5.15], "location": "command"},
+    {"id": "developer", "name": "Dev Agent", "role": "Developer", "department": "Development Studio", "color": "#0EA5E9", "model_profile": "Code Specialist", "position": [-6.3, 0, -0.9], "location": "desk"},
+    {"id": "designer", "name": "Design Agent", "role": "Designer", "department": "Design Studio", "color": "#EC4899", "model_profile": "Visual Specialist", "position": [6.3, 0, -0.9], "location": "desk"},
+    {"id": "researcher", "name": "Research Agent", "role": "Researcher", "department": "Research Library", "color": "#D97706", "model_profile": "Research Specialist", "position": [-6.3, 0, 4.25], "location": "desk"},
+    {"id": "tester", "name": "QA Agent", "role": "Tester", "department": "Quality Lab", "color": "#16A34A", "model_profile": "Quality Specialist", "position": [6.3, 0, 4.25], "location": "desk"},
 ]
 
 
@@ -63,6 +67,7 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'idle',
                 is_paused INTEGER NOT NULL DEFAULT 0,
                 current_task_id TEXT,
+                location TEXT NOT NULL DEFAULT 'desk',
                 updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS tasks (
@@ -79,6 +84,14 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL,
                 started_at TEXT,
                 completed_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS agent_memory (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL REFERENCES agents(id),
+                task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,8 +125,13 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_tasks_agent_created ON tasks(agent_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_events_agent_created ON events(agent_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_created ON agent_memory(agent_id, created_at DESC);
             """
         )
+        agent_columns = {row["name"] for row in connection.execute("PRAGMA table_info(agents)").fetchall()}
+        if "location" not in agent_columns:
+            connection.execute("ALTER TABLE agents ADD COLUMN location TEXT NOT NULL DEFAULT 'desk'")
+
         task_columns = {row["name"] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
         if "orchestration_id" not in task_columns:
             connection.execute("ALTER TABLE tasks ADD COLUMN orchestration_id TEXT REFERENCES orchestrations(id)")
@@ -123,17 +141,17 @@ def init_db() -> None:
         connection.execute("CREATE INDEX IF NOT EXISTS idx_tasks_orchestration ON tasks(orchestration_id, status)")
         connection.execute("CREATE INDEX IF NOT EXISTS idx_orchestrations_status_stage ON orchestrations(status, stage, created_at)")
 
-        existing = connection.execute("SELECT COUNT(*) FROM agents").fetchone()[0]
-        if existing == 0:
-            now = utc_now()
-            for agent in AGENTS:
-                connection.execute(
-                    """INSERT INTO agents
-                    (id, name, role, department, color, model_profile, position_json, status, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?)""",
-                    (agent["id"], agent["name"], agent["role"], agent["department"], agent["color"],
-                     agent["model_profile"], json.dumps(agent["position"]), now),
-                )
+        # Seed missing agents on both fresh and existing databases. This is additive:
+        # existing agent settings, pause states and assignments are never overwritten.
+        now = utc_now()
+        for agent in AGENTS:
+            connection.execute(
+                """INSERT OR IGNORE INTO agents
+                (id, name, role, department, color, model_profile, position_json, status, location, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?)""",
+                (agent["id"], agent["name"], agent["role"], agent["department"], agent["color"],
+                 agent["model_profile"], json.dumps(agent["position"]), agent.get("location", "desk"), now),
+            )
         connection.commit()
 
 
@@ -175,6 +193,7 @@ def agent_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "id": row["id"], "name": row["name"], "role": row["role"], "department": row["department"],
         "color": row["color"], "model": row["model_profile"], "position": json.loads(row["position_json"]),
         "status": row["status"], "paused": bool(row["is_paused"]), "current_task_id": row["current_task_id"],
+        "location": row["location"] if "location" in row.keys() else "desk",
         "currentTask": "No active mission assigned", "progress": 0, "updated_at": row["updated_at"],
     }
 
@@ -188,6 +207,56 @@ def task_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "started_at": row["started_at"], "completed_at": row["completed_at"],
         "orchestration_id": row["orchestration_id"] if "orchestration_id" in row.keys() else None,
     }
+
+
+def remember_completed_task(connection: sqlite3.Connection, task: dict[str, Any], result: str) -> None:
+    """Store a bounded, local-only learning record for future task retrieval."""
+    outcome = str(result or "").strip()
+    if not outcome:
+        return
+    content = (
+        f"Instructions:\n{str(task.get('instructions') or '')[:1200]}\n\n"
+        f"Outcome:\n{outcome[:2200]}"
+    )
+    # Use the same tested credential redactor as external research prompts.
+    content = redact_secrets(content)
+    connection.execute(
+        """INSERT OR IGNORE INTO agent_memory (id, agent_id, task_id, title, content, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)""",
+        (str(uuid4()), task["agent_id"], task["id"], str(task.get("title") or "Completed mission")[:160],
+         content, utc_now()),
+    )
+    # Keep the local memory store bounded instead of growing without limit.
+    connection.execute(
+        """DELETE FROM agent_memory WHERE id IN (
+            SELECT id FROM agent_memory ORDER BY created_at DESC LIMIT -1 OFFSET 500
+        )"""
+    )
+
+
+def recall_agent_memories(agent_id: str, query: str, limit: int = 3) -> list[dict[str, Any]]:
+    """Return relevant local work records using lightweight lexical retrieval."""
+    terms = set(re.findall(r"[a-z0-9_+-]{3,}", str(query or "").lower()))
+    with connect() as connection:
+        rows = connection.execute(
+            "SELECT agent_id, task_id, title, content, created_at FROM agent_memory ORDER BY created_at DESC LIMIT 250"
+        ).fetchall()
+    scored: list[tuple[int, str, dict[str, Any]]] = []
+    for row in rows:
+        title = str(row["title"] or "")
+        content = str(row["content"] or "")
+        title_lower = title.lower()
+        haystack = f"{title_lower} {content.lower()}"
+        score = sum(3 if term in title_lower else 1 for term in terms if term in haystack)
+        if row["agent_id"] == agent_id:
+            score += 2
+        if score:
+            scored.append((score, row["created_at"], dict(row)))
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    if not scored and not terms:
+        scored = [(1, row["created_at"], dict(row)) for row in rows if row["agent_id"] == agent_id]
+        scored.sort(key=lambda item: item[1], reverse=True)
+    return [item[2] for item in scored[:max(1, min(limit, 8))]]
 
 
 def event_to_dict(row: sqlite3.Row) -> dict[str, Any]:
@@ -205,6 +274,8 @@ def create_task(agent_id: str, title: str, instructions: str) -> dict[str, Any]:
         agent = connection.execute("SELECT id, is_paused FROM agents WHERE id = ?", (agent_id,)).fetchone()
         if not agent:
             raise ValueError("Unknown agent.")
+        if agent_id == "team_lead":
+            raise PermissionError("The Team Lead accepts work only through CEO orchestration.")
         if agent["is_paused"]:
             raise PermissionError("This agent is paused. Resume it before assigning a mission.")
         connection.execute(

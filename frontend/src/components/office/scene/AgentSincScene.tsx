@@ -23,12 +23,37 @@ type SceneProps = {
 };
 
 const roomLayout = [
-  { id: "command", label: "COMMAND HUB", position: [0, -4.5] as [number, number], size: [5.6, 3.8] as [number, number], color: "#8B5CF6" },
-  { id: "development", label: "DEVELOPMENT STUDIO", position: [-6.3, -0.9] as [number, number], size: [5.1, 3.8] as [number, number], color: "#0EA5E9" },
-  { id: "design", label: "DESIGN STUDIO", position: [6.3, -0.9] as [number, number], size: [5.1, 3.8] as [number, number], color: "#EC4899" },
-  { id: "research", label: "RESEARCH LIBRARY", position: [-6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#D97706" },
-  { id: "quality", label: "QUALITY LAB", position: [6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#16A34A" },
+  { id: "command", label: "COMMAND HUB", agentId: "ceo", position: [0, -4.5] as [number, number], size: [7.2, 5.4] as [number, number], color: "#8B5CF6" },
+  { id: "development", label: "DEVELOPMENT STUDIO", agentId: "developer", position: [-6.3, -0.9] as [number, number], size: [5.1, 3.8] as [number, number], color: "#0EA5E9" },
+  { id: "design", label: "DESIGN STUDIO", agentId: "designer", position: [6.3, -0.9] as [number, number], size: [5.1, 3.8] as [number, number], color: "#EC4899" },
+  { id: "research", label: "RESEARCH LIBRARY", agentId: "researcher", position: [-6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#D97706" },
+  { id: "quality", label: "QUALITY LAB", agentId: "tester", position: [6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#16A34A" },
 ];
+
+const officeLocationTargets: Record<string, Record<string, [number, number, number]>> = {
+  command: {
+    developer: [-1.35, 0, -4.25],
+    designer: [1.35, 0, -4.25],
+    researcher: [-1.35, 0, -5.25],
+    tester: [1.35, 0, -5.25],
+  },
+  discussion: {
+    ceo: [-1.65, 0, 4.15],
+    team_lead: [0, 0, 4.15],
+    developer: [-1.05, 0, 3.5],
+    designer: [1.05, 0, 3.5],
+    researcher: [-1.05, 0, 4.9],
+    tester: [1.05, 0, 4.9],
+  },
+  meeting: {
+    ceo: [0, 0, 6.15],
+    team_lead: [0, 0, 7.6],
+    developer: [-1.85, 0, 7.6],
+    designer: [1.85, 0, 7.6],
+    researcher: [-1.85, 0, 8.3],
+    tester: [1.85, 0, 8.3],
+  },
+};
 
 const roomTargets: Record<string, [number, number, number]> = {
   all: [0, 0.55, 0],
@@ -37,6 +62,8 @@ const roomTargets: Record<string, [number, number, number]> = {
   design: [6.3, 0.55, -0.9],
   research: [-6.3, 0.55, 4.25],
   quality: [6.3, 0.55, 4.25],
+  discussion: [0, 0.72, 4.15],
+  meeting: [0, 0.8, 7.55],
 };
 
 export function AgentSincScene({
@@ -79,12 +106,15 @@ export function AgentSincScene({
           position={room.position}
           size={room.size}
           color={room.color}
+          agent={agents.find((agent) => agent.id === room.agentId)}
+          teamLead={agents.find((agent) => agent.id === "team_lead")}
           focused={focusedRoom === room.id}
         />
       ))}
 
       <CentralCommandHub accent={palette.accent} secondary={palette.secondary} />
       <GlassMeetingRoom accent={palette.secondary} />
+      <ConferenceRoom accent={palette.accent} secondary={palette.secondary} />
       <ReceptionArch accent={palette.secondary} />
       <CeilingLights accent={palette.accent} />
       <Plant position={[-10, 0, -6.8]} />
@@ -254,12 +284,16 @@ function OfficeZone({
   size,
   color,
   focused,
+  agent,
+  teamLead,
 }: {
   label: string;
   position: [number, number];
   size: [number, number];
   color: string;
   focused: boolean;
+  agent?: OfficeAgent;
+  teamLead?: OfficeAgent;
 }) {
   const [x, z] = position;
   const [width, depth] = size;
@@ -292,12 +326,15 @@ function OfficeZone({
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
       </mesh>
       <GlassDivider color={color} width={width} depth={depth} />
-      <Html position={[0, 2.45, -depth / 2 + 0.45]} center distanceFactor={11} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.55, -depth / 2 + 0.45]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div className={focused ? "scene-zone-label focused" : "scene-zone-label"} style={{ "--zone-color": color } as React.CSSProperties}>
           <i />{label}
         </div>
       </Html>
-      <WorkDesk color={color} />
+      <WorkDesk color={color} agent={agent} />
+      {label.includes("COMMAND") ? (
+        <WorkDesk color="#0F9D91" position={[2.05, 0, -0.65]} agent={teamLead} />
+      ) : null}
       {label.includes("RESEARCH") ? <BookShelf position={[-1.75, 0, -0.2]} /> : null}
       {label.includes("QUALITY") ? <TestBench position={[1.65, 0, -0.2]} color={color} /> : null}
       {label.includes("DESIGN") ? <MoodWall position={[1.6, 0, -1.2]} color={color} /> : null}
@@ -328,9 +365,17 @@ function GlassDivider({ color, width, depth }: { color: string; width: number; d
   );
 }
 
-function WorkDesk({ color }: { color: string }) {
+function WorkDesk({
+  color,
+  position = [0, 0, 0.2],
+  agent,
+}: {
+  color: string;
+  position?: [number, number, number];
+  agent?: OfficeAgent;
+}) {
   return (
-    <group position={[0, 0, 0.2]}>
+    <group position={position}>
       <mesh castShadow receiveShadow position={[0, 0.78, -0.35]}>
         <boxGeometry args={[1.9, 0.16, 0.9]} />
         <meshPhysicalMaterial color="#B98555" roughness={0.42} metalness={0.02} clearcoat={0.2} clearcoatRoughness={0.34} />
@@ -345,14 +390,30 @@ function WorkDesk({ color }: { color: string }) {
           <meshStandardMaterial color="#AEB8C4" metalness={0.72} roughness={0.27} />
         </mesh>
       )))}
-      <mesh position={[0, 1.2, -0.65]} castShadow>
-        <boxGeometry args={[1.05, 0.66, 0.09]} />
-        <meshPhysicalMaterial color="#293344" metalness={0.58} roughness={0.19} clearcoat={0.8} />
+      <mesh position={[0, 1.32, -0.65]} castShadow>
+        <boxGeometry args={[1.12, 0.82, 0.09]} />
+        <meshPhysicalMaterial color="#202C3D" metalness={0.62} roughness={0.17} clearcoat={0.85} />
       </mesh>
-      <mesh position={[0, 1.2, -0.6]}>
-        <planeGeometry args={[0.9, 0.52]} />
-        <meshBasicMaterial color="#A5D8FF" />
+      <mesh position={[0, 1.32, -0.6]}>
+        <planeGeometry args={[0.98, 0.68]} />
+        <meshBasicMaterial color={agent?.status === "working" ? "#D9F7FF" : "#B9D7F2"} />
       </mesh>
+      <Html position={[0, 1.32, -0.545]} center transform distanceFactor={8} style={{ pointerEvents: "none" }}>
+        <div className="scene-monitor-ui">
+          <div className="scene-monitor-top"><i />SINC · LIVE WORKSTATION</div>
+          <strong>{agent ? STATUS_LABELS[agent.status].toUpperCase() : "AVAILABLE"}</strong>
+          <small className="scene-monitor-task">
+            {agent?.currentTask && agent.currentTask !== "No active mission assigned"
+              ? agent.currentTask
+              : "READY FOR ASSIGNMENT"}
+          </small>
+          <small className="scene-monitor-activity">
+            {agent?.latestActivity || "Waiting for a new mission assignment."}
+          </small>
+          <div className="scene-monitor-progress"><i style={{ width: String(agent?.progress ?? 0) + "%" }} /></div>
+          <span className="scene-monitor-percent">{agent?.progress ?? 0}% complete</span>
+        </div>
+      </Html>
       <mesh position={[0, 0.87, -0.59]}>
         <boxGeometry args={[0.1, 0.13, 0.11]} />
         <meshStandardMaterial color="#AAB4C0" metalness={0.68} roughness={0.28} />
@@ -375,15 +436,23 @@ function WorkDesk({ color }: { color: string }) {
         <boxGeometry args={[0.18, 0.035, 0.2]} />
         <meshPhysicalMaterial color="#E8EDF3" roughness={0.38} />
       </mesh>
-      <OfficeChair color={color} position={[0, 0, 1.05]} />
+      <OfficeChair color={color} position={[0, 0, 1.05]} rotation={[0, Math.PI, 0]} />
       <DeskLamp color={color} position={[-0.72, 0.88, -0.28]} />
     </group>
   );
 }
 
-function OfficeChair({ color, position }: { color: string; position: [number, number, number] }) {
+function OfficeChair({
+  color,
+  position,
+  rotation = [0, 0, 0],
+}: {
+  color: string;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+}) {
   return (
-    <group position={position}>
+    <group position={position} rotation={rotation}>
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.68, 0.13, 0.64]} />
         <meshPhysicalMaterial color={color} roughness={0.83} metalness={0.01} clearcoat={0.08} />
@@ -454,34 +523,113 @@ function CentralCommandHub({ accent, secondary }: { accent: string; secondary: s
 }
 
 function GlassMeetingRoom({ accent }: { accent: string }) {
+  const seats = [
+    { position: [0, 0, -1.15] as [number, number, number], rotation: 0 },
+    { position: [0, 0, 1.15] as [number, number, number], rotation: Math.PI },
+    { position: [-1.6, 0, 0] as [number, number, number], rotation: Math.PI / 2 },
+    { position: [1.6, 0, 0] as [number, number, number], rotation: -Math.PI / 2 },
+  ];
   return (
     <group position={[0, 0, 4.15]}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-        <planeGeometry args={[4.3, 2.1]} />
-        <meshStandardMaterial color="#60738F" transparent opacity={0.15} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]} receiveShadow>
+        <planeGeometry args={[4.7, 2.9]} />
+        <meshPhysicalMaterial color="#DCE7F2" roughness={0.48} metalness={0.05} />
       </mesh>
-      {[-2.12, 2.12].map((x) => (
-        <mesh key={x} position={[x, 1.0, 0]}>
-          <boxGeometry args={[0.06, 1.9, 2.1]} />
-          <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.12} roughness={0.1} />
+      {[-2.3, 2.3].map((x) => (
+        <mesh key={x} position={[x, 1.08, 0]}>
+          <boxGeometry args={[0.065, 2.05, 2.85]} />
+          <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.2} roughness={0.08} transmission={0.42} />
         </mesh>
       ))}
-      <mesh position={[0, 0.08, -1.02]}>
-        <boxGeometry args={[4.2, 0.08, 0.07]} />
-        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.4} />
+      <mesh position={[0, 1.08, -1.42]}>
+        <boxGeometry args={[4.65, 2.05, 0.065]} />
+        <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.2} roughness={0.08} transmission={0.42} />
       </mesh>
-      <mesh position={[0, 0.48, 0]}>
-        <cylinderGeometry args={[0.78, 0.86, 0.16, 8]} />
-        <meshStandardMaterial color="#34435F" metalness={0.3} />
+      <mesh position={[0, 0.08, -1.42]}>
+        <boxGeometry args={[4.6, 0.08, 0.08]} />
+        <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.32} />
       </mesh>
-      {[-1.35, 1.35].map((x) => (
-        <mesh key={x} position={[x, 0.32, 0]}>
-          <cylinderGeometry args={[0.24, 0.24, 0.55, 10]} />
-          <meshStandardMaterial color="#34435F" />
+      <mesh position={[0, 0.78, 0]}>
+        <cylinderGeometry args={[1.02, 1.1, 0.16, 12]} />
+        <meshPhysicalMaterial color="#B9C5D4" roughness={0.3} metalness={0.18} clearcoat={0.45} />
+      </mesh>
+      {seats.map((seat, index) => (
+        <group key={index} position={seat.position} rotation={[0, seat.rotation, 0]}>
+          <OfficeChair color={accent} position={[0, 0, 0]} />
+        </group>
+      ))}
+      <Html position={[0, 2.35, -1.48]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
+        <div className="scene-room-sign">DISCUSSION ROOM · 04 SEATS</div>
+      </Html>
+    </group>
+  );
+}
+
+function ConferenceRoom({ accent, secondary }: { accent: string; secondary: string }) {
+  const sideSeats = [-1.8, 0, 1.8];
+  return (
+    <group position={[0, 0, 7.6]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]} receiveShadow>
+        <planeGeometry args={[6.5, 4.55]} />
+        <meshPhysicalMaterial color="#E8EEF5" roughness={0.4} metalness={0.06} />
+      </mesh>
+      <mesh position={[-3.2, 1.62, 0]}>
+        <boxGeometry args={[0.07, 3.15, 4.45]} />
+        <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.19} roughness={0.08} transmission={0.48} />
+      </mesh>
+      <mesh position={[3.2, 1.62, 0]}>
+        <boxGeometry args={[0.07, 3.15, 4.45]} />
+        <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.19} roughness={0.08} transmission={0.48} />
+      </mesh>
+      <mesh position={[0, 1.62, -2.22]}>
+        <boxGeometry args={[6.45, 3.15, 0.07]} />
+        <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.19} roughness={0.08} transmission={0.48} />
+      </mesh>
+      {[-2.1, 2.1].map((x) => (
+        <mesh key={x} position={[x, 1.62, 2.22]}>
+          <boxGeometry args={[2.25, 3.15, 0.07]} />
+          <meshPhysicalMaterial color="#B9D9F6" transparent opacity={0.19} roughness={0.08} transmission={0.48} />
         </mesh>
       ))}
-      <Html position={[0, 2.15, -1.1]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
-        <div className="scene-room-sign">COLLABORATION LOUNGE</div>
+      {[[-3.2, -2.2], [3.2, -2.2], [-3.2, 2.2], [3.2, 2.2]].map(([x, z], index) => (
+        <mesh key={index} position={[x, 1.62, z]}>
+          <boxGeometry args={[0.12, 3.2, 0.12]} />
+          <meshStandardMaterial color="#93A5BB" metalness={0.62} roughness={0.26} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.81, 0]}>
+        <boxGeometry args={[5.0, 0.16, 1.35]} />
+        <meshPhysicalMaterial color="#9E795C" roughness={0.36} metalness={0.03} clearcoat={0.24} />
+      </mesh>
+      <mesh position={[0, 0.91, 0]}>
+        <boxGeometry args={[4.55, 0.035, 1.08]} />
+        <meshStandardMaterial color="#D8C4AE" roughness={0.55} />
+      </mesh>
+      {sideSeats.map((x) => (
+        <group key={"north-" + x} position={[x, 0, -1.35]}>
+          <OfficeChair color={secondary} position={[0, 0, 0]} />
+        </group>
+      ))}
+      {sideSeats.map((x) => (
+        <group key={"south-" + x} position={[x, 0, 1.35]} rotation={[0, Math.PI, 0]}>
+          <OfficeChair color={secondary} position={[0, 0, 0]} />
+        </group>
+      ))}
+      {[{ x: -2.68, rotation: Math.PI / 2 }, { x: 2.68, rotation: -Math.PI / 2 }].map((seat) => (
+        <group key={seat.x} position={[seat.x, 0, 0]} rotation={[0, seat.rotation, 0]}>
+          <OfficeChair color={secondary} position={[0, 0, 0]} />
+        </group>
+      ))}
+      <mesh position={[0, 1.95, -2.13]}>
+        <boxGeometry args={[2.4, 1.1, 0.08]} />
+        <meshPhysicalMaterial color="#25364D" metalness={0.32} roughness={0.2} clearcoat={0.65} />
+      </mesh>
+      <mesh position={[0, 1.95, -2.075]}>
+        <planeGeometry args={[2.16, 0.86]} />
+        <meshBasicMaterial color={accent} />
+      </mesh>
+      <Html position={[0, 2.8, -2.24]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
+        <div className="scene-room-sign">SINC MEETING ROOM · 08 SEATS</div>
       </Html>
     </group>
   );
@@ -618,17 +766,50 @@ function AgentAvatar({
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
   const haloRef = useRef<THREE.Mesh>(null);
+  const leftLegRef = useRef<THREE.Group>(null);
+  const rightLegRef = useRef<THREE.Group>(null);
+  const homePosition: [number, number, number] = [
+    agent.position[0], 0, agent.position[2] + 1.1,
+  ];
+  const destination = agent.location && agent.location !== "desk" && agent.location !== "command"
+    ? officeLocationTargets[agent.location]?.[agent.id] ?? homePosition
+    : agent.location === "command"
+      ? officeLocationTargets.command?.[agent.id] ?? homePosition
+      : homePosition;
   const bobOffset = useMemo(() => agent.position[0] * 0.13, [agent.position]);
   const skinTone = agent.id === "researcher" ? "#B97852" : agent.id === "designer" ? "#D69B76" : agent.id === "tester" ? "#C58C69" : "#D29A75";
   const hairTone = agent.id === "designer" ? "#302322" : agent.id === "researcher" ? "#241D19" : "#302A28";
   const wearsGlasses = agent.id === "tester" || agent.id === "researcher";
   const isPaused = agent.status === "paused";
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const time = clock.elapsedTime;
     const breathing = Math.sin(time * 1.65 + bobOffset) * 0.012;
-    if (groupRef.current) groupRef.current.position.y = Math.sin(time * 1.8 + bobOffset) * 0.012;
-    if (torsoRef.current) torsoRef.current.position.y = 1.02 + breathing;
+    let walking = false;
+    if (groupRef.current) {
+      const currentX = groupRef.current.position.x;
+      const currentZ = groupRef.current.position.z;
+      const remaining = Math.hypot(destination[0] - currentX, destination[2] - currentZ);
+      walking = remaining > 0.075;
+      groupRef.current.position.x = THREE.MathUtils.damp(currentX, destination[0], 1.55, delta);
+      groupRef.current.position.z = THREE.MathUtils.damp(currentZ, destination[2], 1.55, delta);
+      groupRef.current.position.y = walking
+        ? Math.abs(Math.sin(time * 10 + bobOffset)) * 0.045
+        : Math.sin(time * 1.8 + bobOffset) * 0.012;
+      const heading = walking
+        ? Math.atan2(destination[0] - currentX, destination[2] - currentZ)
+        : Math.PI;
+      groupRef.current.rotation.y = THREE.MathUtils.damp(
+        groupRef.current.rotation.y, heading, 7, delta
+      );
+    }
+    if (torsoRef.current) {
+      torsoRef.current.position.y = 1.02 + breathing;
+      torsoRef.current.rotation.x = walking ? -0.075 : 0;
+    }
+    const stride = walking ? Math.sin(time * 10 + bobOffset) * 0.42 : 0;
+    if (leftLegRef.current) leftLegRef.current.rotation.x = stride;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = -stride;
     if (headRef.current) {
       const thinkingTilt = agent.status === "thinking" ? 0.09 : 0;
       headRef.current.rotation.z = thinkingTilt + Math.sin(time * 0.7 + bobOffset) * 0.012;
@@ -636,12 +817,13 @@ function AgentAvatar({
     }
     const workMotion = agent.status === "working" ? Math.sin(time * 3.2 + bobOffset) * 0.045 : 0;
     const talkMotion = agent.status === "collaborating" ? Math.sin(time * 2.2 + bobOffset) * 0.08 : 0;
+    const walkArmSwing = walking ? Math.sin(time * 10 + bobOffset) * 0.24 : 0;
     if (leftArmRef.current) {
-      leftArmRef.current.rotation.x = -0.12 + workMotion - talkMotion;
+      leftArmRef.current.rotation.x = -0.12 + workMotion - talkMotion + walkArmSwing;
       leftArmRef.current.rotation.z = 0.12 + (isPaused ? 0 : talkMotion * 0.35);
     }
     if (rightArmRef.current) {
-      rightArmRef.current.rotation.x = -0.12 - workMotion + talkMotion;
+      rightArmRef.current.rotation.x = -0.12 - workMotion + talkMotion - walkArmSwing;
       rightArmRef.current.rotation.z = -0.12 - (isPaused ? 0 : talkMotion * 0.35);
     }
     if (haloRef.current) {
@@ -657,7 +839,8 @@ function AgentAvatar({
 
   return (
     <group
-      position={[agent.position[0], 0, agent.position[2] + 1.1]}
+      position={homePosition}
+      rotation={[0, Math.PI, 0]}
       onClick={handleSelect}
       ref={groupRef}
     >
@@ -752,17 +935,21 @@ function AgentAvatar({
         ) : null}
       </group>
 
-      <mesh castShadow position={[-0.13, 0.43, 0]}>
-        <capsuleGeometry args={[0.088, 0.47, 6, 12]} />
-        <meshPhysicalMaterial color="#45536A" roughness={0.86} />
-      </mesh>
-      <mesh castShadow position={[0.13, 0.43, 0]}>
-        <capsuleGeometry args={[0.088, 0.47, 6, 12]} />
-        <meshPhysicalMaterial color="#45536A" roughness={0.86} />
-      </mesh>
-      {[-0.14, 0.14].map((side) => (
-        <group key={side}>
-          <mesh castShadow position={[side, 0.105, 0.055]} scale={[1, 0.62, 1.52]}>
+      {[-0.13, 0.13].map((side, index) => (
+        <group
+          key={side}
+          ref={index === 0 ? leftLegRef : rightLegRef}
+          position={[side, 0.72, 0.05]}
+        >
+          <mesh castShadow position={[0, -0.02, 0.24]} rotation={[Math.PI / 2, 0, 0]}>
+            <capsuleGeometry args={[0.09, 0.34, 6, 12]} />
+            <meshPhysicalMaterial color="#45536A" roughness={0.86} />
+          </mesh>
+          <mesh castShadow position={[0, -0.32, 0.48]}>
+            <capsuleGeometry args={[0.078, 0.29, 6, 12]} />
+            <meshPhysicalMaterial color="#45536A" roughness={0.86} />
+          </mesh>
+          <mesh castShadow position={[0, -0.55, 0.58]} scale={[1, 0.62, 1.52]}>
             <sphereGeometry args={[0.115, 18, 14]} />
             <meshPhysicalMaterial color="#253247" roughness={0.55} />
           </mesh>
@@ -798,7 +985,7 @@ function AgentAvatar({
         </mesh>
       </group>
 
-      <Html position={[0, 2.18, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 2.18, 0]} center distanceFactor={15} style={{ pointerEvents: "none" }}>
         <div className={selected ? "scene-agent-tag selected" : "scene-agent-tag"} style={{ "--agent-color": agent.color } as React.CSSProperties}>
           <span>{agent.name}</span>
           <small>{STATUS_LABELS[agent.status]}</small>

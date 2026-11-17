@@ -7,7 +7,7 @@ This is the first executable AgentSINC runtime. It is local-first and uses:
 - Ollama for local model inference; no paid model API key is required.
 - A separate Python worker that polls queued missions, writes progress, and publishes a heartbeat.
 
-The 3D office is a client. Closing the browser does not stop the worker.
+The 3D office is a client. Closing the browser does not stop the worker. The scene now reflects live agent state and includes separate four-seat discussion and eight-seat meeting rooms.
 
 ## Requirements
 
@@ -60,6 +60,15 @@ After creating the virtual environment and installing the requirements, run from
 
 It opens separate API and worker PowerShell windows. Keep both open while the local runtime is in use.
 
+## Optional local environment configuration
+
+The backend loads `backend/.env` on startup. To configure optional Google Search grounding for the Research Agent:
+
+    Copy-Item .env.example .env
+    notepad .env
+
+Set `AGENTSINC_GOOGLE_SEARCH_ENABLED=true`, `GEMINI_API_KEY` and optionally `AGENTSINC_GOOGLE_SEARCH_MODEL=gemini-2.5-flash`. Keep `.env` private and never commit the key. Restart the API and worker after editing it. Google Search grounding is disabled unless the setting and key are both present. See [local learning memory and Google research](../docs/LOCAL_LEARNING_AND_GOOGLE_RESEARCH.md) for privacy and free-tier details.
+
 ## Local Ollama performance defaults
 
 The default local tuning targets a laptop GPU with 4 GB VRAM and Ollama's 4K context:
@@ -105,8 +114,9 @@ This is bounded lexical retrieval, not a complete semantic index. It does not gr
 
 ## What works in this phase
 
-- Real, persistent five-agent roster.
-- CEO requests, JSON plans, specialist task handoffs and consolidated reports.
+- Real, persistent six-agent roster: CEO, Team Lead, Developer, Designer, Researcher and QA.
+- CEO founder requests routed to the Team Lead for planning, specialist delegation and report synthesis.
+- Individual specialist report access directly from each Mission Board assignment.
 - Specialist delegation limited to Developer, Designer, Researcher and Tester.
 - Create a mission and assign it to an agent.
 - Queue, run, complete and fail mission states.
@@ -117,11 +127,11 @@ This is bounded lexical retrieval, not a complete semantic index. It does not gr
 - View the current result and task progress in the workspace.
 - See API, worker heartbeat, Ollama connection, installed models and selected model.
 
-## CEO orchestration
+## CEO and Team Lead orchestration
 
-Select SINC CEO in the 3D office and submit a founder request. The local CEO worker then:
+Select SINC CEO or Team Lead in the 3D office and submit a founder request. The CEO is the founder-facing entry point; the Team Lead owns planning, delegation and synthesis. The Team Lead then:
 
-1. Reads the same bounded, read-only workspace snapshot.
+1. Reads the same bounded, read-only workspace snapshot and relevant local learning records.
 2. Produces a JSON plan with one to four specialist missions.
 3. Validates that every delegated agent is one of Developer, Designer, Researcher or Tester.
 4. Persists the plan and specialist tasks in SQLite.
@@ -129,13 +139,15 @@ Select SINC CEO in the 3D office and submit a founder request. The local CEO wor
 6. Waits for all specialist tasks to reach a terminal state.
 7. Synthesizes the actual specialist results into a CEO report.
 
-The Mission Board shows CEO orchestration stage, specialist assignments, task progress, cancellation and the consolidated report. CEO requests, plans, child missions and events survive restarts. If the worker restarts during planning or synthesis, the stage is retried; interrupted specialist missions are safely requeued unless cancellation was requested.
+The Mission Board shows Team Lead orchestration stage, specialist assignments, task progress, cancellation, each individual specialist report and the consolidated CEO report. Founder requests, plans, child missions and events survive restarts. If the worker restarts during planning or synthesis, the stage is retried; interrupted specialist missions are safely requeued unless cancellation was requested.
 
 This is sequential coordination, not parallel model execution. It does not create independent always-running model processes for each character. All specialist work shares the selected local Ollama model and the one local worker.
 
-## Honest capability boundary
+## Local learning and honest capability boundary
 
-The worker can inspect bounded, read-only text context from the configured project workspace and use it to produce evidence-based analysis with relative file citations. It still has no shell, browser, network research, source-control write, file-edit, deployment, email or payment tools. It must not claim those actions have been completed. File modifications and command execution are deferred until a separately isolated sandbox, explicit permissions and human approval workflow are implemented.
+Completed specialist missions are stored as bounded records in a local SQLite `agent_memory` table. Later missions retrieve up to three relevant records as untrusted historical context. The memory store is capped at 500 records and common credential patterns are redacted. This is local retrieval memory, not fine-tuning or model-weight training.
+
+The worker can inspect bounded, read-only text context from the configured project workspace and use it to produce evidence-based analysis with relative file citations. The Research Agent can optionally call Google's Gemini API with Google Search grounding when explicitly enabled in `.env`; only its mission title and instructions are sent to Google, not the workspace snapshot or local memory. Other agents remain local-only. The worker still has no general browser, shell, source-control write, file-edit, deployment, email or payment tools. Specialists cannot claim to edit files or run tests. File modifications and command execution are deferred until a separately isolated sandbox, explicit permissions and human approval workflow are implemented.
 
 ## Zero-cost and 24/7 expectations
 

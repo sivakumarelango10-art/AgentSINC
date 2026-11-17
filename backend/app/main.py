@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .db import add_event, agent_to_dict, connect, create_task, create_orchestration, event_to_dict, get_orchestration_detail, init_db, orchestration_to_dict, set_runtime_value, task_to_dict, utc_now
+from .research import google_search_is_enabled
 from .workspace import WorkspaceError, list_workspace_files, read_workspace_file, search_workspace, workspace_summary
 
 
@@ -35,6 +36,10 @@ class AgentControlRequest(BaseModel):
 
 class SelectModelRequest(BaseModel):
     model: str = Field(min_length=1, max_length=160)
+
+
+class SetAgentLocationRequest(BaseModel):
+    location: Literal["desk", "command", "discussion", "meeting"]
 
 
 def create_app() -> FastAPI:
@@ -62,10 +67,11 @@ def create_app() -> FastAPI:
     async def overview() -> dict:
         with connect() as connection:
             agent_rows = connection.execute(
-                "SELECT * FROM agents ORDER BY CASE id WHEN 'ceo' THEN 0 ELSE 1 END, name"
+                "SELECT * FROM agents ORDER BY CASE id WHEN 'ceo' THEN 0 WHEN 'team_lead' THEN 1 ELSE 2 END, name"
             ).fetchall()
             task_rows = connection.execute("SELECT * FROM tasks ORDER BY created_at DESC LIMIT 100").fetchall()
             event_rows = connection.execute("SELECT * FROM events ORDER BY id DESC LIMIT 80").fetchall()
+            memory_records = connection.execute("SELECT COUNT(*) FROM agent_memory").fetchone()[0]
             runtime_rows = connection.execute("SELECT key, value, updated_at FROM runtime_state").fetchall()
             orchestration_rows = connection.execute(
                 "SELECT * FROM orchestrations ORDER BY created_at DESC LIMIT 30"
@@ -85,15 +91,31 @@ def create_app() -> FastAPI:
             ).fetchall()
 
         task_map = {row["id"]: task_to_dict(row) for row in current_tasks}
+        latest_activity_by_agent: dict[str, str] = {}
+        # event_rows are newest-first; preserve the newest real event for each desk.
+        for event in event_rows:
+            latest_activity_by_agent.setdefault(event["agent_id"], event["message"])
+
         agents = []
         for row in agent_rows:
             item = agent_to_dict(row)
-            if row["id"] == "ceo" and active_orchestration:
+            if row["id"] == "team_lead" and active_orchestration:
                 item["currentTask"] = active_orchestration["title"]
                 item["progress"] = round(active_orchestration_progress or 0)
                 item["status"] = "paused" if item["paused"] else (
                     "thinking" if active_orchestration["stage"] in ("planning", "synthesizing")
                     else "collaborating"
+                )
+                # The Team Lead's 3D destination is derived from the persisted
+                # orchestration lifecycle, never from an animation-only timer.
+                stage = active_orchestration["stage"]
+                item["location"] = (
+                    "discussion" if stage == "executing"
+                    else "meeting" if stage == "synthesizing"
+                    else "command"
+                )
+                item["latestActivity"] = latest_activity_by_agent.get(
+                    row["id"], "Team Lead is coordinating the current request."
                 )
                 agents.append(item)
                 continue
@@ -112,6 +134,10 @@ def create_app() -> FastAPI:
                 item["status"] = "paused" if item["paused"] else (
                     "queued" if queued else ("failed" if row["status"] == "failed" else "idle")
                 )
+            item["location"] = row["location"]
+            item["latestActivity"] = latest_activity_by_agent.get(
+                row["id"], "Waiting for a mission assignment."
+            )
             agents.append(item)
 
         state = {row["key"]: {"value": row["value"], "updated_at": row["updated_at"]} for row in runtime_rows}
@@ -177,6 +203,8 @@ def create_app() -> FastAPI:
                 "zero_cost_mode": True,
                 "execution_mode": "local-ollama",
                 "last_generation_metrics": last_generation_metrics,
+                "memory_records": memory_records,
+                "google_search_enabled": google_search_is_enabled(),
             },
         }
 
@@ -388,6 +416,36 @@ def create_app() -> FastAPI:
             add_event(connection, agent_id, agent["current_task_id"], event_type, message)
             connection.commit()
         return {"ok": True, "agent_id": agent_id, "paused": bool(paused), "message": message}
+
+    @app.post("/api/v1/agents/{agent_id}/location")
+    def move_agent(agent_id: str, payload: SetAgentLocationRequest) -> dict:
+        with connect() as connection:
+            agent = connection.execute("SELECT * FROM agents WHERE id=?", (agent_id,)).fetchone()
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent not found.")
+            if agent_id == "team_lead":
+                active = connection.execute(
+                    "SELECT 1 FROM orchestrations WHERE status='running' LIMIT 1"
+                ).fetchone()
+                if active:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="The Team Lead is following an active orchestration route. Move them after it finishes.",
+                    )
+            now = utc_now()
+            connection.execute(
+                "UPDATE agents SET location=?, updated_at=? WHERE id=?",
+                (payload.location, now, agent_id),
+            )
+            add_event(
+                connection,
+                agent_id,
+                agent["current_task_id"],
+                "agent_location_changed",
+                f'{agent["name"]} was sent to the {payload.location.replace("_", " ")}.',
+            )
+            connection.commit()
+        return {"ok": True, "agent_id": agent_id, "location": payload.location}
 
     @app.patch("/api/v1/runtime/model")
     async def select_model(payload: SelectModelRequest) -> dict:
