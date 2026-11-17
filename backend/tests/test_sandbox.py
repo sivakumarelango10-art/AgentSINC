@@ -96,7 +96,8 @@ def test_frontend_build_copies_dependencies_inside_turbopack_workspace() -> None
 
     assert "cp -a /opt/agentsinc/frontend/node_modules /tmp/agentsinc-workspace/frontend/node_modules" in bootstrap
     assert "ln -s /opt/agentsinc/frontend/node_modules" not in bootstrap
-    assert "cd /tmp/agentsinc-workspace/frontend; npm run build" in bootstrap
+    assert "cd /tmp/agentsinc-workspace/frontend; node ./node_modules/next/dist/bin/next build" in bootstrap
+    assert "npm run build" not in command
 
 
 def test_python_suite_does_not_copy_frontend_dependencies() -> None:
@@ -106,3 +107,13 @@ def test_python_suite_does_not_copy_frontend_dependencies() -> None:
     bootstrap = _build_workspace_bootstrap(working_directory, command)
 
     assert "cp -a /opt/agentsinc/frontend/node_modules" not in bootstrap
+
+
+
+def test_frontend_build_invokes_next_cli_through_node() -> None:
+    from app.sandbox import TEST_SUITES
+
+    _, command = TEST_SUITES["frontend-build"]
+    assert command.startswith("node ./node_modules/next/dist/bin/next ")
+    assert command.endswith(" build")
+    assert command != "npm run build"

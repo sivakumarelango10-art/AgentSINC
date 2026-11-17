@@ -26,7 +26,7 @@ TEST_SUITES: dict[str, tuple[str, str]] = {
     ),
     "frontend-build": (
         "frontend",
-        "npm run build",
+        "node ./node_modules/next/dist/bin/next build",
     ),
 }
 
