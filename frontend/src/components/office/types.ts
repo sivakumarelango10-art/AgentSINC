@@ -30,6 +30,14 @@ export type OfficeAgent = {
   /** Actual latest task result/error. Never replaced with a generated activity placeholder. */
   latestResult?: string | null;
   latestTaskUpdatedAt?: string | null;
+  /** Latest actual harness tool events, newest first; empty means no tool call was recorded. */
+  recentToolEvents?: Array<{
+    id: number;
+    event_type: string;
+    message: string;
+    created_at: string;
+    task_id: string | null;
+  }>;
   paused?: boolean;
 };
 

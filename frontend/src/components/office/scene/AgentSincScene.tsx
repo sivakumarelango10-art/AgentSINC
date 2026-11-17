@@ -1067,6 +1067,8 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
       : "No active mission";
     const activity = agent?.latestActivity || "Waiting for a task assignment.";
     const result = agent?.latestResult || "";
+    const latestToolEvent = agent?.recentToolEvents?.[0];
+    const latestToolMessage = latestToolEvent?.message || "No tool execution recorded for this task.";
 
     context.clearRect(0, 0, width, height);
     context.fillStyle = "#0B1220";
@@ -1121,13 +1123,20 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
     context.font = "500 19px Inter, Arial, sans-serif";
     drawCanvasLines(context, activity, 34, 408, 920, 29, 3);
 
+    context.fillStyle = "#8EA2BC";
+    context.font = "700 15px Inter, Arial, sans-serif";
+    context.fillText("LATEST TOOL TRACE", 34, 500);
+    context.fillStyle = "#B9D5E9";
+    context.font = "600 17px Inter, Arial, sans-serif";
+    drawCanvasLines(context, latestToolMessage, 34, 530, 920, 22, 1);
+
     if (result) {
       context.fillStyle = "#8EA2BC";
       context.font = "700 15px Inter, Arial, sans-serif";
-      context.fillText(status === "completed" ? "LATEST RESULT" : "LATEST OUTPUT", 34, 542);
+      context.fillText(status === "completed" ? "LATEST RESULT" : "LATEST OUTPUT", 34, 560);
       context.fillStyle = "#9EB0C7";
       context.font = "500 16px Inter, Arial, sans-serif";
-      drawCanvasLines(context, result.replace(/\s+/g, " "), 34, 574, 920, 23, 3);
+      drawCanvasLines(context, result.replace(/\s+/g, " "), 34, 590, 920, 20, 2);
     }
 
     // Progress is rendered only from the backend's persisted task progress.
@@ -1154,6 +1163,8 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
     agent?.currentTask,
     agent?.latestActivity,
     agent?.latestResult,
+    agent?.recentToolEvents?.[0]?.event_type,
+    agent?.recentToolEvents?.[0]?.message,
     agent?.progress,
     agent?.latestTaskUpdatedAt,
   ]);

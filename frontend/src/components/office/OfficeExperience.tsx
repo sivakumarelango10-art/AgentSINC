@@ -657,6 +657,7 @@ function AgentPanel({
   const isCoordinator = selectedAgent.id === "ceo" || selectedAgent.id === "team_lead";
   const coordinatorName = selectedAgent.id === "team_lead" ? "Team Lead" : "CEO";
   const latestEvents = events.slice(0, 7);
+  const recentToolEvents = events.filter((event) => event.event_type.startsWith("tool_")).slice(0, 5);
   return (
     <div className="panel-content">
       <div className="agent-feature">
@@ -748,6 +749,19 @@ function AgentPanel({
         {runtime.api_connected && (!runtime.worker_online || !runtime.ollama_online) ? <small className="form-hint">Mission can queue now; start Ollama and the worker to process it.</small> : null}
         <small className="form-hint">{isCoordinator ? "The CEO receives founder requests. The Team Lead plans and delegates work to Research, Design, Development and QA, then consolidates their reports." : "The local model returns analysis and text deliverables. Repository edits and code execution remain approval-gated and disabled."}</small>
       </form>
+
+      <section className="agent-tool-trace">
+        <div className="panel-section-label">REAL TOOL EXECUTION <span>{recentToolEvents.length.toString().padStart(2, "0")}</span></div>
+        {recentToolEvents.length ? recentToolEvents.map((event) => (
+          <article className="agent-tool-event" key={event.id}>
+            <i className={event.event_type === "tool_completed" ? "tool-event-dot completed" : event.event_type === "tool_failed" || event.event_type === "tool_blocked" ? "tool-event-dot failed" : "tool-event-dot"} />
+            <div>
+              <strong>{event.message}</strong>
+              <small>{formatTime(event.created_at)}</small>
+            </div>
+          </article>
+        )) : <div className="panel-note">No harness tool calls have been recorded for this agent yet. Tool activity appears here only after a real tool is invoked.</div>}
+      </section>
 
       <div className="panel-section-label">AGENT TIMELINE <span>{events.length.toString().padStart(2, "0")}</span></div>
       <div className="agent-timeline">

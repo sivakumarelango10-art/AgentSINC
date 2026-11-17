@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any, Callable
 
 import httpx
 
-from .db import create_tool_approval, get_tool_approval
+from .db import add_event, connect, create_tool_approval, get_tool_approval
 from .mcp_registry import MCPRegistry, MCPRegistryError
+from .redaction import redact_secrets
 from .research import fetch_google_search_context
 from .sandbox import run_test_suite
 from .workspace import WorkspaceError, read_workspace_file, search_workspace
@@ -137,7 +139,113 @@ class AgentHarness:
             self.registry_error = str(exc)
         return tools
 
+    def _record_tool_event(self, event_type: str, message: str) -> None:
+        """Persist a compact, credential-redacted execution trace for this mission."""
+        with connect() as connection:
+            add_event(
+                connection,
+                self.task["agent_id"],
+                self.task["id"],
+                event_type,
+                redact_secrets(message)[:1200],
+            )
+            connection.commit()
+
+    def _tool_result_summary(self, name: str, arguments: dict[str, Any], output: str) -> str:
+        clean = redact_secrets(str(output or "")).replace("\r", " ").replace("\n", " ")
+        clean = re.sub(r"\s+", " ", clean).strip()
+
+        if name == "tests.run":
+            try:
+                result = json.loads(output)
+            except (TypeError, ValueError):
+                result = {}
+            suite = str(result.get("suite") or arguments.get("suite") or "test suite")
+            status = str(result.get("status") or "unknown").upper()
+            exit_code = result.get("exit_code")
+            detail = str(result.get("stdout") or result.get("stderr") or "").strip()
+            detail = re.sub(r"\s+", " ", redact_secrets(detail))
+            return f"{suite}: {status}; exit={exit_code if exit_code is not None else 'n/a'}; {detail[-280:]}".strip()
+
+        if name == "research.google_search":
+            urls = list(dict.fromkeys(re.findall(r"""https?://[^\s\])>"']+""", clean)))
+            if urls:
+                return f"Google Search returned {len(urls)} source URL(s): " + " | ".join(urls[:3])
+            return clean[:560] or "Research tool returned no text."
+
+        if name == "workspace.write_file":
+            try:
+                result = json.loads(output)
+            except (TypeError, ValueError):
+                result = {}
+            if result.get("status") == "written":
+                return (
+                    f"Wrote {result.get('path', 'source file')} "
+                    f"({result.get('bytes_written', 0)} bytes; SHA-256 {str(result.get('sha256', ''))[:16]}…)."
+                )
+            return clean[:560] or "File change is awaiting founder approval."
+
+        if name == "repo.search":
+            try:
+                result = json.loads(output)
+            except (TypeError, ValueError):
+                result = {}
+            matches = result.get("matches") if isinstance(result, dict) else None
+            if isinstance(matches, list):
+                found_paths = [str(item.get("path")) for item in matches[:3] if isinstance(item, dict) and item.get("path")]
+                return f"Repository search found {len(matches)} match(es)" + (": " + ", ".join(found_paths) if found_paths else ".")
+            return clean[:560]
+
+        if name == "repo.read":
+            path = str(arguments.get("path") or "workspace file")
+            return f"Read {path} ({len(output)} characters)."
+
+        if name.startswith("mcp."):
+            return f"{name} returned {len(output)} character(s): {clean[:340]}"
+
+        return clean[:560] or f"{name} returned an empty result."
+
     async def execute_tool(self, name: str, arguments: dict[str, Any]) -> str:
+        """Log each actual tool invocation and its real bounded result."""
+        if self.cancelled():
+            raise HarnessCancelled("Mission cancelled before tool execution.")
+        safe_name = str(name or "unknown")[:120]
+        self._record_tool_event("tool_started", f"Started tool: {safe_name}.")
+        try:
+            output = await self._execute_tool_impl(name, arguments)
+        except Exception as exc:
+            self._record_tool_event(
+                "tool_failed",
+                f"{safe_name} failed before returning a result ({type(exc).__name__}).",
+            )
+            raise
+
+        lower = output.lower()
+        event_type = "tool_completed"
+        if "waiting for founder approval" in lower or ("approval request" in lower and "visible" in lower):
+            event_type = "tool_awaiting_approval"
+        elif any(token in lower for token in (
+            "tool execution was rejected", "tool execution failed", "external research request failed",
+            "founder rejected", "approval timed out", "not available to the", "not configured",
+        )):
+            event_type = "tool_failed"
+        elif name == "tests.run":
+            try:
+                test_status = str(json.loads(output).get("status") or "").lower()
+            except (TypeError, ValueError):
+                test_status = ""
+            if test_status in {"failed", "timed_out"}:
+                event_type = "tool_failed"
+            elif test_status == "not_run":
+                event_type = "tool_blocked"
+
+        self._record_tool_event(
+            event_type,
+            f"{safe_name}: {self._tool_result_summary(name, arguments, output)}",
+        )
+        return output
+
+    async def _execute_tool_impl(self, name: str, arguments: dict[str, Any]) -> str:
         if self.cancelled():
             raise RuntimeError("Mission cancelled before tool execution.")
         if not isinstance(arguments, dict):
@@ -216,6 +324,10 @@ class AgentHarness:
             payload,
         )
         approval_id = approval["id"]
+        self._record_tool_event(
+            "tool_awaiting_approval",
+            f"Founder approval requested for {tool_name}; request {approval_id[:8]}.",
+        )
         self.progress(78, f"Waiting for founder approval: {tool_name} ({approval_id[:8]}).")
         self.progress(78, f"Approval request {approval_id[:8]} is visible in the AgentSINC Approvals panel.")
 

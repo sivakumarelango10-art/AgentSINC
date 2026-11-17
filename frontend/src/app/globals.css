@@ -667,3 +667,13 @@ html, body { background: #EEF2F6; color: #1D2939; }
 .approval-code-preview { max-height: 190px; overflow: auto; padding: 9px; border: 1px solid rgba(148,163,184,.15); border-radius: 7px; color: #DCE8F7; background: #0B1220; font: 8px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .approval-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 10px; }
 .approval-actions .runtime-action { min-height: 30px; padding: 0 10px; font-size: 8px; }
+
+
+.agent-tool-trace { margin: 12px 0 16px; padding: 11px; border: 1px solid rgba(100,116,139,.17); border-radius: 10px; background: rgba(244,248,252,.78); }
+.agent-tool-event { display: grid; grid-template-columns: 7px minmax(0,1fr); gap: 9px; align-items: start; padding: 8px 0; border-top: 1px solid rgba(100,116,139,.12); }
+.agent-tool-event:first-of-type { border-top: 0; }
+.tool-event-dot { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; background: #D69A35; box-shadow: 0 0 0 3px rgba(214,154,53,.12); }
+.tool-event-dot.completed { background: #20A879; box-shadow: 0 0 0 3px rgba(32,168,121,.12); }
+.tool-event-dot.failed { background: #D85C67; box-shadow: 0 0 0 3px rgba(216,92,103,.12); }
+.agent-tool-event strong { display: block; color: #34465C; font-size: 9px; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-tool-event small { display: block; margin-top: 3px; color: #8290A2; font-size: 8px; }
