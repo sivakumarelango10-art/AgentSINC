@@ -23,3 +23,65 @@ def test_sandbox_requires_explicit_image(monkeypatch) -> None:
     result = run_test_suite("python-tests")
     assert result["status"] == "not_run"
     assert "not configured" in result["reason"]
+
+
+
+def test_python_sandbox_suites_use_python3_available_in_image() -> None:
+    from app.sandbox import TEST_SUITES
+
+    assert "python3 -m pytest" in TEST_SUITES["python-tests"][1]
+    assert "python3 -c" in TEST_SUITES["python-syntax"][1]
+    assert "python -m pytest" not in TEST_SUITES["python-tests"][1]
+
+
+def test_sandbox_status_reports_ready_only_when_daemon_and_image_exist(monkeypatch) -> None:
+    import subprocess
+    from app.sandbox import get_sandbox_status
+
+    monkeypatch.setenv("AGENTSINC_SANDBOX_IMAGE", "agentsinc-sandbox:local")
+    monkeypatch.setattr("app.sandbox.shutil.which", lambda _: "C:/Docker/docker.exe")
+    monkeypatch.setattr(
+        "app.sandbox.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, stdout="sha256:abc", stderr=""),
+    )
+
+    status = get_sandbox_status()
+    assert status["available"] is True
+    assert status["docker_cli_available"] is True
+    assert status["docker_daemon_available"] is True
+    assert status["image_available"] is True
+
+
+def test_sandbox_status_explains_missing_image(monkeypatch) -> None:
+    import subprocess
+    from app.sandbox import get_sandbox_status
+
+    monkeypatch.setenv("AGENTSINC_SANDBOX_IMAGE", "agentsinc-sandbox:local")
+    monkeypatch.setattr("app.sandbox.shutil.which", lambda _: "C:/Docker/docker.exe")
+    monkeypatch.setattr(
+        "app.sandbox.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1, stdout="", stderr="No such image: agentsinc-sandbox:local"),
+    )
+
+    status = get_sandbox_status()
+    assert status["available"] is False
+    assert status["docker_daemon_available"] is True
+    assert status["image_available"] is False
+    assert "Build it" in status["reason"]
+
+
+def test_sandbox_status_explains_unreachable_docker_engine(monkeypatch) -> None:
+    import subprocess
+    from app.sandbox import get_sandbox_status
+
+    monkeypatch.setenv("AGENTSINC_SANDBOX_IMAGE", "agentsinc-sandbox:local")
+    monkeypatch.setattr("app.sandbox.shutil.which", lambda _: "C:/Docker/docker.exe")
+    monkeypatch.setattr(
+        "app.sandbox.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 1, stdout="", stderr="failed to connect to the Docker API"),
+    )
+
+    status = get_sandbox_status()
+    assert status["available"] is False
+    assert status["docker_daemon_available"] is False
+    assert "engine is not reachable" in status["reason"]
