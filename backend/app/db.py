@@ -121,6 +121,19 @@ def init_db() -> None:
                 started_at TEXT,
                 completed_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS tool_approvals (
+                id TEXT PRIMARY KEY,
+                task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                agent_id TEXT NOT NULL REFERENCES agents(id),
+                tool_name TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                result TEXT,
+                created_at TEXT NOT NULL,
+                resolved_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_tool_approvals_status_created ON tool_approvals(status, created_at);
+            CREATE INDEX IF NOT EXISTS idx_tool_approvals_task ON tool_approvals(task_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_agent_created ON tasks(agent_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at DESC);
@@ -351,3 +364,129 @@ def get_orchestration_detail(orchestration_id: str) -> dict[str, Any] | None:
             if child_tasks else (100 if row["status"] == "completed" else 0)
         )
         return result
+
+
+
+def tool_approval_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    try:
+        payload = json.loads(row["payload_json"])
+    except (TypeError, ValueError):
+        payload = {}
+    return {
+        "id": row["id"],
+        "task_id": row["task_id"],
+        "agent_id": row["agent_id"],
+        "tool_name": row["tool_name"],
+        "payload": payload,
+        "status": row["status"],
+        "result": row["result"],
+        "created_at": row["created_at"],
+        "resolved_at": row["resolved_at"],
+    }
+
+
+def create_tool_approval(
+    task_id: str,
+    agent_id: str,
+    tool_name: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Persist a founder-visible approval request before a mutating tool is run."""
+    approval_id = str(uuid4())
+    now = utc_now()
+    with connect() as connection:
+        task = connection.execute(
+            "SELECT id, status FROM tasks WHERE id=? AND agent_id=?",
+            (task_id, agent_id),
+        ).fetchone()
+        if not task or task["status"] != "running":
+            raise ValueError("The task is no longer running; no tool approval can be requested.")
+        connection.execute(
+            """INSERT INTO tool_approvals
+            (id, task_id, agent_id, tool_name, payload_json, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', ?)""",
+            (approval_id, task_id, agent_id, tool_name, json.dumps(payload), now),
+        )
+        connection.execute(
+            "UPDATE agents SET status='waiting', updated_at=? WHERE id=? AND current_task_id=?",
+            (now, agent_id, task_id),
+        )
+        add_event(
+            connection, agent_id, task_id, "tool_approval_requested",
+            f"Waiting for founder approval before running {tool_name}.",
+        )
+        row = connection.execute(
+            "SELECT * FROM tool_approvals WHERE id=?", (approval_id,)
+        ).fetchone()
+        connection.commit()
+        return tool_approval_to_dict(row)
+
+
+def get_tool_approval(approval_id: str) -> dict[str, Any] | None:
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT * FROM tool_approvals WHERE id=?", (approval_id,)
+        ).fetchone()
+        return tool_approval_to_dict(row) if row else None
+
+
+def list_tool_approvals(status: str = "pending", limit: int = 100) -> list[dict[str, Any]]:
+    allowed = {"pending", "approved", "rejected", "failed", "all"}
+    if status not in allowed:
+        raise ValueError("Unsupported approval status.")
+    bounded = max(1, min(int(limit), 200))
+    with connect() as connection:
+        if status == "all":
+            rows = connection.execute(
+                "SELECT * FROM tool_approvals ORDER BY created_at DESC LIMIT ?",
+                (bounded,),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT * FROM tool_approvals WHERE status=? ORDER BY created_at DESC LIMIT ?",
+                (status, bounded),
+            ).fetchall()
+        return [tool_approval_to_dict(row) for row in rows]
+
+
+def resolve_tool_approval(
+    approval_id: str,
+    status: str,
+    result: str,
+) -> dict[str, Any] | None:
+    if status not in {"approved", "rejected", "failed"}:
+        raise ValueError("Approval status must be approved, rejected or failed.")
+    now = utc_now()
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT * FROM tool_approvals WHERE id=?", (approval_id,)
+        ).fetchone()
+        if not row:
+            return None
+        if row["status"] != "pending":
+            raise ValueError("This approval request has already been resolved.")
+        connection.execute(
+            "UPDATE tool_approvals SET status=?, result=?, resolved_at=? WHERE id=? AND status='pending'",
+            (status, str(result or "")[:12000], now, approval_id),
+        )
+        task = connection.execute(
+            "SELECT status FROM tasks WHERE id=?", (row["task_id"],)
+        ).fetchone()
+        if task and task["status"] == "running":
+            connection.execute(
+                """UPDATE agents SET status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'working' END,
+                updated_at=? WHERE id=? AND current_task_id=?""",
+                (now, row["agent_id"], row["task_id"]),
+            )
+        add_event(
+            connection,
+            row["agent_id"],
+            row["task_id"],
+            "tool_approval_resolved",
+            f"Founder {status} the {row['tool_name']} request.",
+        )
+        updated = connection.execute(
+            "SELECT * FROM tool_approvals WHERE id=?", (approval_id,)
+        ).fetchone()
+        connection.commit()
+        return tool_approval_to_dict(updated)
