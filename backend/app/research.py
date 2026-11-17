@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from .redaction import redact_secrets
+
 
 def google_search_is_enabled() -> bool:
     enabled = os.getenv("AGENTSINC_GOOGLE_SEARCH_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
@@ -15,17 +17,7 @@ def google_search_is_enabled() -> bool:
 
 def _redact_external_prompt(value: str, limit: int) -> str:
     """Redact common credential patterns before a prompt leaves the local machine."""
-    cleaned = re.sub(
-        r'''(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)\b\s*[:=]\s*["']?([^\s"',;]+)["']?''',
-        r"\1=[REDACTED]",
-        str(value or ""),
-    )
-    cleaned = re.sub(
-        r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}",
-        "Bearer [REDACTED]",
-        cleaned,
-    )
-    return cleaned[:limit]
+    return redact_secrets(str(value or ""))[:limit]
 
 
 async def fetch_google_search_context(

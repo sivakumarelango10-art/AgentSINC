@@ -6,6 +6,7 @@ import json
 import httpx
 
 from app.research import fetch_google_search_context, google_search_is_enabled
+from app.redaction import redact_secrets
 
 
 def test_google_search_requires_explicit_opt_in_and_api_key(monkeypatch) -> None:
@@ -78,3 +79,20 @@ def test_google_search_disabled_returns_honest_no_research_message(monkeypatch) 
     result = asyncio.run(run())
     assert "not enabled" in result.lower()
     assert "No external web results were retrieved" in result
+
+
+
+def test_secret_redaction_consumes_complete_authorization_values() -> None:
+    source = (
+        "api_key=private-api-key-value "
+        "Authorization=Bearer private-bearer-token-value "
+        "Authorization: Basic private-basic-token-value "
+        "Bearer private-standalone-token-value"
+    )
+    cleaned = redact_secrets(source)
+
+    assert "private-api-key-value" not in cleaned
+    assert "private-bearer-token-value" not in cleaned
+    assert "private-basic-token-value" not in cleaned
+    assert "private-standalone-token-value" not in cleaned
+    assert cleaned.count("[REDACTED]") >= 4

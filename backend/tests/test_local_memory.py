@@ -42,7 +42,8 @@ def test_completed_missions_become_bounded_local_memory_and_redact_secrets(tmp_p
             connection,
             task,
             "Verified SQLite persistence and worker lifecycle. API_KEY=local-secret-token "
-            "Authorization=Bearer very-long-private-token-value",
+            "Authorization=Bearer very-long-private-token-value "
+            "Authorization: Basic another-private-token-value",
         )
         connection.commit()
 

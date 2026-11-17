@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from .redaction import redact_secrets
+
 
 AGENTS: list[dict[str, Any]] = [
     {"id": "ceo", "name": "SINC CEO", "role": "Founder Interface", "department": "Command Hub", "color": "#7C3AED", "model_profile": "Founder Liaison", "position": [0, 0, -4.5], "location": "command"},
@@ -216,23 +218,8 @@ def remember_completed_task(connection: sqlite3.Connection, task: dict[str, Any]
         f"Instructions:\n{str(task.get('instructions') or '')[:1200]}\n\n"
         f"Outcome:\n{outcome[:2200]}"
     )
-    # Avoid persisting obvious credential assignments in the learning index.
-    content = re.sub(
-        r'''(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)\b\s*[:=]\s*["']?([^\s"',;]+)["']?''',
-        r"\1=[REDACTED]",
-        content,
-    )
-    content = re.sub(
-        r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{12,}",
-        "Bearer [REDACTED]",
-        content,
-    )
-    content = re.sub(
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
-        "[REDACTED PRIVATE KEY]",
-        content,
-        flags=re.DOTALL,
-    )
+    # Use the same tested credential redactor as external research prompts.
+    content = redact_secrets(content)
     connection.execute(
         """INSERT OR IGNORE INTO agent_memory (id, agent_id, task_id, title, content, created_at)
         VALUES (?, ?, ?, ?, ?, ?)""",
