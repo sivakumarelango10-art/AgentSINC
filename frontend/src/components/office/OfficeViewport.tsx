@@ -11,6 +11,7 @@ type OfficeViewportProps = {
   onSelectAgent: (id: string) => void;
   theme: BrandTheme;
   focusedRoom: string;
+  followSelectedAgent: boolean;
 };
 
 export default function OfficeViewport({
@@ -19,6 +20,7 @@ export default function OfficeViewport({
   onSelectAgent,
   theme,
   focusedRoom,
+  followSelectedAgent,
 }: OfficeViewportProps) {
   const palette = BRAND_THEMES[theme];
 
@@ -44,6 +46,7 @@ export default function OfficeViewport({
           onSelectAgent={onSelectAgent}
           palette={palette}
           focusedRoom={focusedRoom}
+          followSelectedAgent={followSelectedAgent}
         />
       </Suspense>
     </Canvas>

@@ -9,6 +9,8 @@ export type AgentStatus =
   | "failed";
 
 export type BrandTheme = "cyber" | "ember" | "indigo";
+export type AgentActivityType = "idle" | "coordinating" | "researching" | "coding" | "debugging" | "designing" | "testing" | "reviewing";
+export type AgentPosture = "sitting" | "standing";
 
 export type OfficeAgent = {
   id: string;
@@ -25,6 +27,9 @@ export type OfficeAgent = {
   location?: "desk" | "command" | "discussion" | "meeting";
   /** Most recent persisted event for this agent, shown on the in-world workstation. */
   latestActivity?: string;
+  activityType?: AgentActivityType;
+  posture?: AgentPosture;
+  currentOperation?: string;
   paused?: boolean;
 };
 

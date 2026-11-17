@@ -2,7 +2,8 @@
 
 import { Html, OrbitControls } from "@react-three/drei";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import { STATUS_LABELS, type OfficeAgent } from "../types";
 
@@ -20,6 +21,7 @@ type SceneProps = {
   onSelectAgent: (id: string) => void;
   palette: Palette;
   focusedRoom: string;
+  followSelectedAgent: boolean;
 };
 
 const roomLayout = [
@@ -72,8 +74,23 @@ export function AgentSincScene({
   onSelectAgent,
   palette,
   focusedRoom,
+  followSelectedAgent,
 }: SceneProps) {
   const roomTarget = roomTargets[focusedRoom] ?? roomTargets.all;
+  const avatarRefs = useRef<Record<string, THREE.Group | null>>({});
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+
+  useFrame(({ camera }, delta) => {
+    if (!followSelectedAgent || !selectedAgentId || !controlsRef.current) return;
+    const tracked = avatarRefs.current[selectedAgentId];
+    if (!tracked) return;
+    const target = new THREE.Vector3(tracked.position.x, tracked.position.y + 1.12, tracked.position.z);
+    const offset = target.sub(controlsRef.current.target);
+    offset.multiplyScalar(1 - Math.exp(-3.6 * delta));
+    controlsRef.current.target.add(offset);
+    camera.position.add(offset);
+    controlsRef.current.update();
+  });
 
   return (
     <>
@@ -129,10 +146,12 @@ export function AgentSincScene({
           agent={agent}
           selected={agent.id === selectedAgentId}
           onSelect={onSelectAgent}
+          avatarRefs={avatarRefs}
         />
       ))}
 
       <OrbitControls
+        ref={controlsRef}
         makeDefault
         target={roomTarget}
         enableDamping
@@ -394,26 +413,7 @@ function WorkDesk({
         <boxGeometry args={[1.12, 0.82, 0.09]} />
         <meshPhysicalMaterial color="#202C3D" metalness={0.62} roughness={0.17} clearcoat={0.85} />
       </mesh>
-      <mesh position={[0, 1.32, -0.6]}>
-        <planeGeometry args={[0.98, 0.68]} />
-        <meshBasicMaterial color={agent?.status === "working" ? "#D9F7FF" : "#B9D7F2"} />
-      </mesh>
-      <Html position={[0, 1.32, -0.545]} center transform distanceFactor={8} style={{ pointerEvents: "none" }}>
-        <div className="scene-monitor-ui">
-          <div className="scene-monitor-top"><i />SINC · LIVE WORKSTATION</div>
-          <strong>{agent ? STATUS_LABELS[agent.status].toUpperCase() : "AVAILABLE"}</strong>
-          <small className="scene-monitor-task">
-            {agent?.currentTask && agent.currentTask !== "No active mission assigned"
-              ? agent.currentTask
-              : "READY FOR ASSIGNMENT"}
-          </small>
-          <small className="scene-monitor-activity">
-            {agent?.latestActivity || "Waiting for a new mission assignment."}
-          </small>
-          <div className="scene-monitor-progress"><i style={{ width: String(agent?.progress ?? 0) + "%" }} /></div>
-          <span className="scene-monitor-percent">{agent?.progress ?? 0}% complete</span>
-        </div>
-      </Html>
+      <WorkstationDisplay agent={agent} />
       <mesh position={[0, 0.87, -0.59]}>
         <boxGeometry args={[0.1, 0.13, 0.11]} />
         <meshStandardMaterial color="#AAB4C0" metalness={0.68} roughness={0.28} />
@@ -440,6 +440,102 @@ function WorkDesk({
       <DeskLamp color={color} position={[-0.72, 0.88, -0.28]} />
     </group>
   );
+}
+
+function WorkstationDisplay({ agent }: { agent?: OfficeAgent }) {
+  const texture = useMemo(() => createWorkstationTexture(agent), [
+    agent?.id, agent?.status, agent?.activityType, agent?.currentTask,
+    agent?.currentOperation, agent?.latestActivity, agent?.progress,
+  ]);
+  useEffect(() => () => texture.dispose(), [texture]);
+  return (
+    <mesh position={[0, 1.32, -0.545]}>
+      <planeGeometry args={[0.98, 0.68]} />
+      <meshBasicMaterial map={texture} toneMapped={false} />
+    </mesh>
+  );
+}
+
+function createWorkstationTexture(agent?: OfficeAgent): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 640;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return new THREE.CanvasTexture(canvas);
+  const rounded = (x: number, y: number, w: number, h: number, r: number, fill: string) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    ctx.fill();
+  };
+  const labels: Record<string, string> = {
+    idle: "STANDBY", coordinating: "ORCHESTRATION", researching: "RESEARCH SESSION",
+    coding: "CODE WORKSPACE", debugging: "DEBUG SESSION", designing: "DESIGN WORKSPACE",
+    testing: "TEST RUNNER", reviewing: "DOCUMENT REVIEW",
+  };
+  const activity = agent?.activityType ?? "idle";
+  const status = agent?.status ?? "idle";
+  const accent = agent?.color ?? "#64748B";
+  const task = agent?.currentTask && agent.currentTask !== "No active mission assigned"
+    ? agent.currentTask : "No mission assigned";
+  const operation = agent?.currentOperation || agent?.latestActivity || "Waiting for a task from the Team Lead.";
+  const progress = Math.max(0, Math.min(100, agent?.progress ?? 0));
+
+  ctx.fillStyle = "#08111F"; ctx.fillRect(0, 0, 1024, 640);
+  ctx.fillStyle = "#101C2D"; ctx.fillRect(0, 0, 1024, 58);
+  ctx.fillStyle = "#1A2A3F"; ctx.fillRect(0, 58, 1024, 1);
+  rounded(22, 18, 12, 12, 6, status === "failed" ? "#F87171" : status === "working" || status === "collaborating" ? "#4ADE80" : "#94A3B8");
+  ctx.font = "bold 19px Inter, Arial, sans-serif"; ctx.fillStyle = "#DCE8F6"; ctx.fillText("SINC WORKSTATION", 48, 37);
+  ctx.font = "16px Inter, Arial, sans-serif"; ctx.fillStyle = "#8295AE";
+  const agentName = agent?.name ?? "Agent";
+  ctx.fillText(agentName, 1000 - ctx.measureText(agentName).width - 24, 36);
+
+  ctx.fillStyle = "#0D1828"; ctx.fillRect(0, 59, 92, 581);
+  ["OVERVIEW", "MISSION", "ACTIVITY", "OUTPUT"].forEach((item, index) => {
+    const y = 105 + index * 54;
+    if (index === 1) rounded(12, y - 23, 68, 38, 7, "#1C3047");
+    ctx.font = "bold 12px Inter, Arial, sans-serif"; ctx.fillStyle = index === 1 ? "#D9E8F8" : "#71849D";
+    ctx.fillText(item, 17, y);
+  });
+
+  ctx.fillStyle = "#A7B8CD"; ctx.font = "bold 15px Inter, Arial, sans-serif";
+  ctx.fillText(labels[activity] ?? "AGENT WORKSPACE", 122, 102);
+  ctx.fillStyle = "#53667F"; ctx.font = "13px Inter, Arial, sans-serif";
+  ctx.fillText("LIVE TASK TELEMETRY  /  PERSISTED BACKEND EVENTS", 122, 128);
+
+  rounded(122, 153, 878, 117, 10, "#122238");
+  ctx.font = "bold 15px Inter, Arial, sans-serif"; ctx.fillStyle = "#8EA6C2"; ctx.fillText("CURRENT MISSION", 145, 181);
+  ctx.font = "bold 23px Inter, Arial, sans-serif"; ctx.fillStyle = "#EDF5FF";
+  ctx.fillText(task.length > 62 ? task.slice(0, 59) + "..." : task, 145, 220);
+  ctx.font = "15px Inter, Arial, sans-serif";
+  ctx.fillStyle = status === "failed" ? "#FCA5A5" : status === "working" ? "#86EFAC" : "#AEC0D5";
+  ctx.fillText(status.toUpperCase() + "  ·  " + progress + "%", 145, 249);
+
+  rounded(122, 288, 878, 139, 10, "#0F1D30");
+  ctx.font = "bold 15px Inter, Arial, sans-serif"; ctx.fillStyle = "#8EA6C2"; ctx.fillText("LATEST EXECUTION EVENT", 145, 318);
+  ctx.font = "18px Inter, Arial, sans-serif"; ctx.fillStyle = "#DCE8F6";
+  let line = ""; let lineY = 355;
+  for (const word of operation.split(/\s+/)) {
+    const candidate = line ? line + " " + word : word;
+    if (ctx.measureText(candidate).width > 815 && line) {
+      ctx.fillText(line, 145, lineY); line = word; lineY += 27;
+      if (lineY > 405) break;
+    } else line = candidate;
+  }
+  if (line && lineY <= 405) ctx.fillText(line, 145, lineY);
+
+  rounded(122, 445, 878, 92, 10, "#122238");
+  ctx.font = "bold 14px Inter, Arial, sans-serif"; ctx.fillStyle = "#8EA6C2"; ctx.fillText("TASK PROGRESS", 145, 474);
+  rounded(145, 492, 830, 9, 4, "#263A52");
+  rounded(145, 492, 830 * progress / 100, 9, 4, accent);
+  ctx.font = "13px Inter, Arial, sans-serif"; ctx.fillStyle = "#8EA6C2";
+  ctx.fillText(agent ? "PROGRESS FROM LOCAL WORKER" : "NO BACKEND AGENT SELECTED", 145, 523);
+  ctx.fillText("ACTIVITY ON THIS DISPLAY IS READ FROM PERSISTED AGENT EVENTS", 122, 594);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
 }
 
 function OfficeChair({
@@ -755,10 +851,12 @@ function AgentAvatar({
   agent,
   selected,
   onSelect,
+  avatarRefs,
 }: {
   agent: OfficeAgent;
   selected: boolean;
   onSelect: (id: string) => void;
+  avatarRefs: React.MutableRefObject<Record<string, THREE.Group | null>>;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const torsoRef = useRef<THREE.Group>(null);
@@ -781,6 +879,7 @@ function AgentAvatar({
   const hairTone = agent.id === "designer" ? "#302322" : agent.id === "researcher" ? "#241D19" : "#302A28";
   const wearsGlasses = agent.id === "tester" || agent.id === "researcher";
   const isPaused = agent.status === "paused";
+  const seatBlendRef = useRef(0);
 
   useFrame(({ clock }, delta) => {
     const time = clock.elapsedTime;
@@ -803,13 +902,20 @@ function AgentAvatar({
         groupRef.current.rotation.y, heading, 7, delta
       );
     }
+    const shouldSit = agent.location === "desk" && agent.posture !== "standing";
+    seatBlendRef.current = THREE.MathUtils.damp(seatBlendRef.current, shouldSit && !walking ? 1 : 0, 5.5, delta);
+    const seated = seatBlendRef.current;
     if (torsoRef.current) {
-      torsoRef.current.position.y = 1.02 + breathing;
-      torsoRef.current.rotation.x = walking ? -0.075 : 0;
+      torsoRef.current.position.y = THREE.MathUtils.lerp(1.02, 0.84, seated) + breathing;
+      torsoRef.current.rotation.x = walking ? -0.075 : THREE.MathUtils.lerp(0, -0.055, seated);
     }
+    if (headRef.current) headRef.current.position.y = THREE.MathUtils.lerp(1.73, 1.55, seated);
+    if (leftArmRef.current) leftArmRef.current.position.y = THREE.MathUtils.lerp(1.27, 1.13, seated);
+    if (rightArmRef.current) rightArmRef.current.position.y = THREE.MathUtils.lerp(1.27, 1.13, seated);
     const stride = walking ? Math.sin(time * 10 + bobOffset) * 0.42 : 0;
-    if (leftLegRef.current) leftLegRef.current.rotation.x = stride;
-    if (rightLegRef.current) rightLegRef.current.rotation.x = -stride;
+    const seatedLeg = THREE.MathUtils.lerp(0, -0.7, seated);
+    if (leftLegRef.current) leftLegRef.current.rotation.x = walking ? stride : seatedLeg;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = walking ? -stride : seatedLeg;
     if (headRef.current) {
       const thinkingTilt = agent.status === "thinking" ? 0.09 : 0;
       headRef.current.rotation.z = thinkingTilt + Math.sin(time * 0.7 + bobOffset) * 0.012;
@@ -842,7 +948,10 @@ function AgentAvatar({
       position={homePosition}
       rotation={[0, Math.PI, 0]}
       onClick={handleSelect}
-      ref={groupRef}
+      ref={(node) => {
+        groupRef.current = node;
+        avatarRefs.current[agent.id] = node;
+      }}
     >
       <mesh ref={haloRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.075, 0]}>
         <torusGeometry args={[selected ? 0.72 : 0.56, selected ? 0.038 : 0.022, 10, 56]} />
@@ -985,12 +1094,6 @@ function AgentAvatar({
         </mesh>
       </group>
 
-      <Html position={[0, 2.18, 0]} center distanceFactor={15} style={{ pointerEvents: "none" }}>
-        <div className={selected ? "scene-agent-tag selected" : "scene-agent-tag"} style={{ "--agent-color": agent.color } as React.CSSProperties}>
-          <span>{agent.name}</span>
-          <small>{STATUS_LABELS[agent.status]}</small>
-        </div>
-      </Html>
     </group>
   );
 }
