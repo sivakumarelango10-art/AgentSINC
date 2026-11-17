@@ -296,6 +296,9 @@ def test_orchestrated_specialists_move_to_discussion_then_meeting_then_return_ho
         connection.execute(
             "UPDATE orchestrations SET status='completed', stage='completed' WHERE status='running'"
         )
+        connection.execute(
+            "UPDATE agents SET location='desk' WHERE id IN ('developer','designer','researcher','tester')"
+        )
         connection.commit()
 
     created = client.post(
