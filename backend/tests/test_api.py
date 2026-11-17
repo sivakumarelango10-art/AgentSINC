@@ -369,3 +369,30 @@ def test_orchestrated_specialists_move_to_discussion_then_meeting_then_return_ho
         if item["id"] in {"developer", "designer", "researcher", "tester"}
     }
     assert set(locations.values()) == {"desk"}
+
+
+
+def test_overview_exposes_recent_real_tool_trace_for_each_agent() -> None:
+    with connect() as connection:
+        add_event(
+            connection,
+            "researcher",
+            None,
+            "tool_started",
+            "Started tool: research.google_search.",
+        )
+        add_event(
+            connection,
+            "researcher",
+            None,
+            "tool_completed",
+            "research.google_search: Google Search returned 1 source URL(s): https://example.org/research.",
+        )
+        connection.commit()
+
+    response = client.get("/api/v1/overview")
+    assert response.status_code == 200
+    researcher = next(item for item in response.json()["agents"] if item["id"] == "researcher")
+    assert len(researcher["recentToolEvents"]) >= 2
+    assert researcher["recentToolEvents"][0]["event_type"] == "tool_completed"
+    assert "https://example.org/research" in researcher["recentToolEvents"][0]["message"]

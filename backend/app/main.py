@@ -111,13 +111,19 @@ def create_app() -> FastAPI:
 
         task_map = {row["id"]: task_to_dict(row) for row in current_tasks}
         latest_activity_by_agent: dict[str, str] = {}
-        # event_rows are newest-first; preserve the newest real event for each desk.
+        recent_tool_events_by_agent: dict[str, list[dict[str, Any]]] = {}
+        # event_rows are newest-first. Keep a small, real execution trace per agent.
         for event in event_rows:
             latest_activity_by_agent.setdefault(event["agent_id"], event["message"])
+            if str(event["event_type"]).startswith("tool_"):
+                bucket = recent_tool_events_by_agent.setdefault(event["agent_id"], [])
+                if len(bucket) < 5:
+                    bucket.append(event_to_dict(event))
 
         agents = []
         for row in agent_rows:
             item = agent_to_dict(row)
+            item["recentToolEvents"] = recent_tool_events_by_agent.get(row["id"], [])
             if row["id"] == "team_lead" and active_orchestration:
                 item["currentTask"] = active_orchestration["title"]
                 item["taskStatus"] = "running"

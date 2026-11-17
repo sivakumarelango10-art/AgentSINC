@@ -143,11 +143,36 @@ The Mission Board shows Team Lead orchestration stage, specialist assignments, t
 
 This is sequential coordination, not parallel model execution. It does not create independent always-running model processes for each character. All specialist work shares the selected local Ollama model and the one local worker.
 
-## Local learning and honest capability boundary
+## Agent Harness, real tools and approval boundaries
 
-Completed specialist missions are stored as bounded records in a local SQLite `agent_memory` table. Later missions retrieve up to three relevant records as untrusted historical context. The memory store is capped at 500 records and common credential patterns are redacted. This is local retrieval memory, not fine-tuning or model-weight training.
+The local worker uses a role-scoped Agent Harness by default (`AGENTSINC_AGENT_HARNESS_ENABLED=true`). Each specialist receives a bounded tool list, can make up to eight tool calls per mission, and must report actual tool results rather than infer that an action succeeded.
 
-The worker can inspect bounded, read-only text context from the configured project workspace and use it to produce evidence-based analysis with relative file citations. The Research Agent can optionally call Google's Gemini API with Google Search grounding when explicitly enabled in `.env`; only its mission title and instructions are sent to Google, not the workspace snapshot or local memory. Other agents remain local-only. The worker still has no general browser, shell, source-control write, file-edit, deployment, email or payment tools. Specialists cannot claim to edit files or run tests. File modifications and command execution are deferred until a separately isolated sandbox, explicit permissions and human approval workflow are implemented.
+| Agent | Built-in tools |
+|---|---|
+| Developer | Search/read repository files; propose a source write; run a fixed test suite |
+| Designer | Search/read repository files; propose frontend/source edits; run a fixed test suite |
+| Researcher | Search/read repository files; optional Google Search-grounded research |
+| QA / Tester | Search/read repository files; run a fixed test suite |
+
+**Real code changes:** `workspace.write_file` creates an approval request. The API does not modify the workspace until the founder approves that exact stored payload. Approved writes are atomic and limited to existing directories under `backend/app`, `backend/tests`, `frontend/src` and `docs`. Dependency manifests, lockfiles, environment files, secrets, arbitrary file types, path traversal and symlink destinations are refused. An approved local file write is not automatically a Git commit or push.
+
+**Real tests:** `tests.run` accepts only `python-tests`, `python-syntax`, `frontend-typecheck` and `frontend-build`. It requires Docker and the configured `AGENTSINC_SANDBOX_IMAGE`. The sandbox has no network, a read-only source mount, a disposable tmpfs execution copy, dropped Linux capabilities and CPU/memory/process limits. If Docker or the image is unavailable, the tool returns `not_run`; it never falls back to executing repository code on the host.
+
+Build the optional local test image from the repository root:
+
+    docker build -t agentsinc-sandbox:local -f backend/Dockerfile.sandbox .
+    
+Then set `AGENTSINC_SANDBOX_IMAGE=agentsinc-sandbox:local` in `backend/.env` and restart the worker.
+
+**Google research:** only the Research Agent receives `research.google_search`. It is disabled unless `AGENTSINC_GOOGLE_SEARCH_ENABLED=true` and `GEMINI_API_KEY` are both present. The external request contains the Research Agent's mission/question, not the local workspace snapshot or local memory. Google free-tier terms and availability are controlled by Google.
+
+**MCP integrations:** the registry discovers tools only from servers explicitly listed in `AGENTSINC_MCP_SERVERS_JSON`. It does not install or connect to arbitrary plugins or unknown servers. Each server must specify its transport, agent roles, `allow_tools` and `read_only_tools`. Only explicitly read-only tools execute immediately; every mutating MCP tool creates a founder approval request. Store credentials as named environment-variable references, never inline in the JSON.
+
+GitHub repository creation, remote file writes, pull requests or pushes are possible only when a GitHub MCP server is configured with the exact required tools and scopes. Those remote mutations remain approval-gated. Without that configuration, the local Developer can edit approved workspace files but cannot claim to have pushed them to GitHub.
+
+The six office characters share one local Ollama model and one sequential worker; they are not six independent model processes. Completed missions are stored as bounded records in local SQLite memory (maximum 500); up to three relevant records may be retrieved as historical context. This is retrieval memory, not fine-tuning or model-weight training.
+
+The runtime remains a local-first development system: SQLite, localhost API, local Ollama and one worker. Public multi-user authentication, production database/queue deployment, backup/restore, continuous monitoring, security review and a sustained 24-hour reliability test remain production release gates.
 
 ## Zero-cost and 24/7 expectations
 
