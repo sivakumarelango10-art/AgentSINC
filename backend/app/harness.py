@@ -86,6 +86,10 @@ ROLE_TOOLS = {
 }
 
 
+class HarnessCancelled(RuntimeError):
+    """Raised when a founder cancels a task while the harness is waiting."""
+
+
 class AgentHarness:
     """Role-scoped tool harness for one persisted mission."""
 
@@ -195,6 +199,8 @@ class AgentHarness:
                 return await self._request_approval(name, payload)
 
             return f"Tool {name!r} is not available to the {self.task['agent_id']} agent."
+        except HarnessCancelled:
+            raise
         except (WorkspaceError, MCPRegistryError, ValueError, TypeError) as exc:
             return f"Tool execution was rejected: {exc}"
         except httpx.HTTPError as exc:
@@ -217,7 +223,7 @@ class AgentHarness:
         # No write or external mutation occurs in this process before approval.
         for _ in range(900):  # 30 minutes at a 2-second polling interval
             if self.cancelled():
-                raise RuntimeError("Mission cancelled while waiting for founder approval.")
+                raise HarnessCancelled("Mission cancelled while waiting for founder approval.")
             current = get_tool_approval(approval_id)
             if not current:
                 return "Approval request disappeared; the tool was not executed."
