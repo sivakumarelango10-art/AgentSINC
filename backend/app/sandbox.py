@@ -12,11 +12,11 @@ from .workspace import workspace_root
 TEST_SUITES: dict[str, tuple[str, str]] = {
     "python-tests": (
         "backend",
-        "PYTHONPATH=/tmp/agentsinc-workspace/backend python -m pytest -q -p no:cacheprovider",
+        "PYTHONPATH=/tmp/agentsinc-workspace/backend python3 -m pytest -q -p no:cacheprovider",
     ),
     "python-syntax": (
         ".",
-        "python -c \"import ast,pathlib,sys; files=list(pathlib.Path('/tmp/agentsinc-workspace/backend').rglob('*.py')); "
+        "python3 -c \"import ast,pathlib,sys; files=list(pathlib.Path('/tmp/agentsinc-workspace/backend').rglob('*.py')); "
         "[(ast.parse(p.read_text(encoding='utf-8'), filename=str(p))) for p in files]; "
         "print(f'Parsed {len(files)} Python files')\"",
     ),
@@ -29,6 +29,63 @@ TEST_SUITES: dict[str, tuple[str, str]] = {
         "npm run build",
     ),
 }
+
+
+def get_sandbox_status() -> dict[str, Any]:
+    """Check Docker daemon and configured image, not just the docker.exe path."""
+    docker = shutil.which("docker")
+    image = os.getenv("AGENTSINC_SANDBOX_IMAGE", "").strip()
+    status: dict[str, Any] = {
+        "available": False,
+        "docker_cli_available": bool(docker),
+        "docker_daemon_available": False,
+        "image_configured": bool(image),
+        "image_available": False,
+        "image": image or None,
+        "reason": None,
+    }
+    if not docker:
+        status["reason"] = "Docker CLI is not available on the backend process PATH."
+        return status
+    if not image:
+        status["reason"] = "AGENTSINC_SANDBOX_IMAGE is not configured."
+        return status
+    try:
+        result = subprocess.run(
+            [docker, "image", "inspect", image, "--format", "{{.Id}}"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        status["reason"] = "Docker image inspection timed out while contacting the engine."
+        return status
+    except OSError as exc:
+        status["reason"] = f"Docker could not be started ({type(exc).__name__})."
+        return status
+    if result.returncode == 0 and result.stdout.strip():
+        status.update({
+            "available": True,
+            "docker_daemon_available": True,
+            "image_available": True,
+        })
+        return status
+    error = (result.stderr or result.stdout or "").lower()
+    daemon_unavailable = any(marker in error for marker in (
+        "cannot connect to the docker daemon",
+        "failed to connect to the docker api",
+        "is the docker daemon running",
+        "error during connect",
+        "the system cannot find the file specified",
+    ))
+    status["docker_daemon_available"] = not daemon_unavailable
+    status["reason"] = (
+        "Docker Desktop engine is not reachable from the backend process."
+        if daemon_unavailable
+        else f"Configured sandbox image '{image}' is not available. Build it with backend/Dockerfile.sandbox."
+    )
+    return status
 
 
 def run_test_suite(suite: str) -> dict[str, Any]:

@@ -19,6 +19,7 @@ from .db import (
 from .agent_write import write_agent_file
 from .mcp_registry import MCPRegistry, MCPRegistryError, configured_mcp_server_count
 from .research import google_search_is_enabled
+from .sandbox import get_sandbox_status
 from .workspace import WorkspaceError, list_workspace_files, read_workspace_file, search_workspace, workspace_summary
 
 
@@ -256,6 +257,7 @@ def create_app() -> FastAPI:
         except (TypeError, ValueError):
             last_generation_metrics = {}
 
+        sandbox_status = get_sandbox_status()
         selected_model = state.get("selected_model", {}).get("value") or os.getenv("AGENTSINC_OLLAMA_MODEL")
         if selected_model and selected_model not in models:
             selected_model = None
@@ -284,7 +286,8 @@ def create_app() -> FastAPI:
                 "memory_records": memory_records,
                 "google_search_enabled": google_search_is_enabled(),
                 "agent_harness_enabled": os.getenv("AGENTSINC_AGENT_HARNESS_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
-                "sandbox_available": bool(os.getenv("AGENTSINC_SANDBOX_IMAGE", "").strip()) and __import__("shutil").which("docker") is not None,
+                "sandbox_available": sandbox_status["available"],
+                "sandbox_status": sandbox_status,
                 "mcp_configured_servers": configured_mcp_server_count(),
                 "pending_approvals": len(list_tool_approvals("pending", 200)),
             },
