@@ -132,6 +132,76 @@ def _explicit_specialist_plan(request: dict[str, Any]) -> dict[str, Any] | None:
     return {"summary": summary[:2000], "tasks": tasks}
 
 
+
+def _repository_audit_fallback_plan(request: dict[str, Any]) -> dict[str, Any] | None:
+    """Build a safe, deterministic specialist plan when local JSON planning fails.
+
+    This fallback is intentionally limited to repository audit/review requests.
+    It never grants agents permission to modify files or perform external actions.
+    """
+    request_text = f"{request.get('title', '')}\n{request.get('instructions', '')}".lower()
+    audit_request = any(term in request_text for term in ("audit", "review", "inspect", "assessment"))
+    repository_request = any(term in request_text for term in ("repository", "repo", "codebase"))
+    if not audit_request or not repository_request:
+        return None
+
+    common = (
+        "This is a read-only repository audit. Inspect only the actual files supplied by the "
+        "workspace context, cite exact relative paths, distinguish verified facts from assumptions, "
+        "and identify one high-value improvement with evidence and acceptance criteria. Do not edit "
+        "files, run commands, use unavailable external tools, push branches, create pull requests, "
+        "or claim actions that were not performed."
+    )
+    tasks = [
+        {
+            "agent_id": "developer",
+            "title": "Audit backend orchestration and local runtime",
+            "instructions": (
+                "Review the FastAPI entry points, SQLite persistence, orchestrator, worker, agent "
+                "harness, mission lifecycle, Docker sandbox and their failure handling. Trace how a "
+                "founder request becomes persisted specialist tasks and how tasks are claimed, run, "
+                "completed or failed. " + common
+            ),
+        },
+        {
+            "agent_id": "designer",
+            "title": "Audit frontend integration and agent activity visibility",
+            "instructions": (
+                "Review the Next.js dashboard, mission board, API client, agent state updates, event "
+                "timeline and 3D office interactions. Determine whether displayed work and progress "
+                "are backed by persisted backend state rather than presentation-only activity. " + common
+            ),
+        },
+        {
+            "agent_id": "researcher",
+            "title": "Audit architecture documentation and runtime configuration",
+            "instructions": (
+                "Review repository documentation, architecture decisions, dependency manifests, "
+                "local-first constraints and documented production requirements. Compare documented "
+                "capabilities with implementation evidence in the supplied workspace. Do not claim "
+                "current external research; Google Search is not assumed to be configured. " + common
+            ),
+        },
+        {
+            "agent_id": "tester",
+            "title": "Audit tests, sandbox boundaries and failure recovery",
+            "instructions": (
+                "Review automated tests, test commands, task/orchestration failure paths, worker "
+                "recovery, sandbox security boundaries and missing regression coverage. Clearly "
+                "separate existing test evidence from tests you actually ran; do not claim to have "
+                "executed tests unless tool evidence exists. " + common
+            ),
+        },
+    ]
+    return {
+        "summary": (
+            "Team Lead used a deterministic four-specialist plan for this repository audit because "
+            "the local model did not return a valid structured plan. The requested read-only scope is preserved."
+        ),
+        "tasks": tasks,
+    }
+
+
 def _requests_github_release(request: dict[str, Any]) -> bool:
     text = f"{request.get('title', '')}\n{request.get('instructions', '')}".lower()
     text = re.sub(r"git\s+hub", "github", text)
@@ -431,6 +501,8 @@ async def _plan(
         _cancel(orchestration_id, "Founder cancelled the request during CEO planning.")
         return
 
+    used_fallback_plan = False
+    fallback_reason = ""
     plan = _explicit_specialist_plan(request)
     if plan is None:
         try:
@@ -477,7 +549,18 @@ async def _plan(
         except OrchestrationCancelled:
             _cancel(orchestration_id, "Founder cancelled the request during CEO planning.")
             return
-        except (httpx.HTTPError, RuntimeError, ValueError) as exc:
+        except (RuntimeError, ValueError) as exc:
+            fallback_plan = _repository_audit_fallback_plan(request)
+            if fallback_plan is None:
+                if orchestration_cancelled(orchestration_id):
+                    _cancel(orchestration_id, "Founder cancelled the request while CEO planning was running.")
+                else:
+                    _fail(orchestration_id, f"CEO planning error: {exc}")
+                return
+            plan = fallback_plan
+            used_fallback_plan = True
+            fallback_reason = str(exc)[:240]
+        except httpx.HTTPError as exc:
             if orchestration_cancelled(orchestration_id):
                 _cancel(orchestration_id, "Founder cancelled the request while CEO planning was running.")
             else:
@@ -560,6 +643,13 @@ async def _plan(
             add_event(
                 connection, "team_lead", None, "orchestration_plan_from_founder",
                 "CEO preserved the founder's explicit specialist assignments without asking the model to reinterpret them.",
+                orchestration_id=orchestration_id,
+            )
+        if used_fallback_plan:
+            add_event(
+                connection, "team_lead", None, "orchestration_plan_fallback",
+                "Team Lead used the deterministic repository-audit plan because the local model returned an invalid structured plan. "
+                + f"Original planning error: {fallback_reason}",
                 orchestration_id=orchestration_id,
             )
         connection.commit()

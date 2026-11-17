@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -286,3 +287,57 @@ Review tests, reliability and security boundaries.
     assert 'MISSING REQUESTED SPECIALISTS: ["researcher"]' in captured["user"]
     assert "do not expose" not in final["result"]
     assert "Completed three reviews." in final["result"]
+
+
+def test_repository_audit_uses_deterministic_plan_when_model_returns_invalid_json(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AGENTSINC_DB_PATH", str(tmp_path / "audit-fallback.sqlite3"))
+    init_db()
+    request = create_orchestration(
+        "Mission 001 — Evidence-Based Repository Audit",
+        "Team Lead: audit the AgentSINC repository. Inspect backend architecture, worker lifecycle, "
+        "Docker sandbox, frontend integration, mission activity events and test coverage. "
+        "Keep the work read-only and propose one evidence-backed improvement.",
+    )
+    monkeypatch.setattr(
+        orchestrator,
+        "build_workspace_context",
+        lambda _query: SimpleNamespace(text="README.md: AgentSINC project overview.", files=["README.md"]),
+    )
+
+    async def invalid_json(*_args, **_kwargs) -> str:
+        return "I can provide a review, but this is not a JSON object."
+
+    monkeypatch.setattr(orchestrator, "_chat", invalid_json)
+
+    async def run() -> None:
+        claimed = _claim_planning()
+        assert claimed is not None
+        async with httpx.AsyncClient() as client:
+            await _plan(client, "http://ollama.test", 10, "qwen3:4b", claimed)
+
+    asyncio.run(run())
+
+    detail = get_orchestration_detail(request["id"])
+    assert detail is not None
+    assert detail["status"] == "running"
+    assert detail["stage"] == "executing"
+    assert [task["agent_id"] for task in detail["tasks"]] == [
+        "developer", "designer", "researcher", "tester"
+    ]
+    assert all(task["status"] == "queued" for task in detail["tasks"])
+
+    with connect() as connection:
+        event = connection.execute(
+            "SELECT message FROM events WHERE orchestration_id=? AND event_type='orchestration_plan_fallback'",
+            (request["id"],),
+        ).fetchone()
+    assert event is not None
+    assert "invalid structured plan" in event["message"]
+
+
+def test_repository_audit_fallback_does_not_capture_unrelated_requests() -> None:
+    fallback = orchestrator._repository_audit_fallback_plan({
+        "title": "Plan a team celebration",
+        "instructions": "Review venue options and prepare a birthday checklist.",
+    })
+    assert fallback is None
