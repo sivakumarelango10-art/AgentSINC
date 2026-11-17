@@ -129,6 +129,8 @@ export function OfficeExperience() {
   const [runtime, setRuntime] = useState<RuntimeStatus>(disconnectedRuntime);
   const [runtimeError, setRuntimeError] = useState("Start the local API and worker to enable real agent work.");
   const [selectedAgentId, setSelectedAgentId] = useState("ceo");
+  const [followSelectedAgent, setFollowSelectedAgent] = useState(false);
+  const [agentFocusRequest, setAgentFocusRequest] = useState(0);
   const [activePanel, setActivePanel] = useState<PanelKey>("agents");
   const [focusedRoom, setFocusedRoom] = useState<RoomKey>("all");
   const [showMap, setShowMap] = useState(false);
@@ -242,6 +244,8 @@ export function OfficeExperience() {
 
   const selectAgent = (agentId: string) => {
     setSelectedAgentId(agentId);
+    setFollowSelectedAgent(true);
+    setAgentFocusRequest((value) => value + 1);
     setActivePanel("agents");
     setPanelOpen(true);
     setShowMap(false);
@@ -407,6 +411,8 @@ export function OfficeExperience() {
             onSelectAgent={selectAgent}
             theme={theme}
             focusedRoom={focusedRoom}
+            followSelectedAgent={followSelectedAgent}
+            focusRequest={agentFocusRequest}
           />
         )}
       </div>
@@ -497,6 +503,7 @@ export function OfficeExperience() {
               style={{ "--room-tint": room.tint } as CSSProperties}
               onClick={() => {
                 setFocusedRoom(room.id);
+                setFollowSelectedAgent(false);
                 setShowMap(false);
               }}
             >

@@ -1,6 +1,6 @@
 "use client";
 
-import { Html, OrbitControls } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -20,6 +20,8 @@ type SceneProps = {
   onSelectAgent: (id: string) => void;
   palette: Palette;
   focusedRoom: string;
+  followSelectedAgent: boolean;
+  focusRequest: number;
 };
 
 const roomLayout = [
@@ -72,6 +74,8 @@ export function AgentSincScene({
   onSelectAgent,
   palette,
   focusedRoom,
+  followSelectedAgent,
+  focusRequest,
 }: SceneProps) {
   const roomTarget = roomTargets[focusedRoom] ?? roomTargets.all;
   const { camera } = useThree();
@@ -79,6 +83,7 @@ export function AgentSincScene({
   const avatarRefs = useRef<Record<string, THREE.Group | null>>({});
   const followState = useRef({
     selectedId: null as string | null,
+    focusRequest: -1,
     previousPosition: new THREE.Vector3(),
     focusRemaining: 0,
   });
@@ -87,25 +92,28 @@ export function AgentSincScene({
   // the camera follows only the avatar's world-space displacement, preserving
   // the user's orbit angle and zoom after the initial focus.
   useFrame((_, delta) => {
-    if (!selectedAgentId) {
+    if (!followSelectedAgent || !selectedAgentId) {
       followState.current.selectedId = null;
       return;
     }
     const avatar = avatarRefs.current[selectedAgentId];
     if (!avatar) return;
     const state = followState.current;
-    if (state.selectedId !== selectedAgentId) {
+    if (state.selectedId !== selectedAgentId || state.focusRequest !== focusRequest) {
       state.selectedId = selectedAgentId;
+      state.focusRequest = focusRequest;
       state.previousPosition.copy(avatar.position);
       state.focusRemaining = 1.35;
     }
+    // Bias the look-at point slightly toward the desk so the monitor and
+    // the avatar stay together in the selected-agent view.
     const target = new THREE.Vector3(
       avatar.position.x,
-      avatar.position.y + 1.12,
-      avatar.position.z,
+      avatar.position.y + 1.08,
+      avatar.position.z - 0.38,
     );
     if (state.focusRemaining > 0) {
-      const cameraGoal = target.clone().add(new THREE.Vector3(4.6, 3.15, 6.0));
+      const cameraGoal = target.clone().add(new THREE.Vector3(3.9, 2.55, 4.8));
       const blend = 1 - Math.exp(-3.8 * delta);
       camera.position.lerp(cameraGoal, blend);
       if (controlsRef.current) {
@@ -383,11 +391,6 @@ function OfficeZone({
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
       </mesh>
       <GlassDivider color={color} width={width} depth={depth} />
-      <Html position={[0, 2.55, -depth / 2 + 0.45]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
-        <div className={focused ? "scene-zone-label focused" : "scene-zone-label"} style={{ "--zone-color": color } as React.CSSProperties}>
-          <i />{label}
-        </div>
-      </Html>
       <WorkDesk color={color} agent={agent} />
       {label.includes("COMMAND") ? (
         <WorkDesk color="#0F9D91" position={[2.05, 0, -0.65]} agent={teamLead} />
@@ -447,13 +450,13 @@ function WorkDesk({
           <meshStandardMaterial color="#AEB8C4" metalness={0.72} roughness={0.27} />
         </mesh>
       )))}
-      <mesh position={[0, 1.32, -0.65]} castShadow>
-        <boxGeometry args={[1.12, 0.82, 0.09]} />
+      <mesh position={[0, 1.29, -0.65]} castShadow>
+        <boxGeometry args={[0.94, 0.66, 0.09]} />
         <meshPhysicalMaterial color="#202C3D" metalness={0.62} roughness={0.17} clearcoat={0.85} />
       </mesh>
       <WorkstationScreen agent={agent} />
-      <mesh position={[0, 0.87, -0.59]}>
-        <boxGeometry args={[0.1, 0.13, 0.11]} />
+      <mesh position={[0, 0.895, -0.59]}>
+        <boxGeometry args={[0.1, 0.18, 0.11]} />
         <meshStandardMaterial color="#AAB4C0" metalness={0.68} roughness={0.28} />
       </mesh>
       <mesh castShadow position={[0.68, 0.39, -0.18]}>
@@ -553,9 +556,6 @@ function CentralCommandHub({ accent, secondary }: { accent: string; secondary: s
         <octahedronGeometry args={[0.34, 0]} />
         <meshPhysicalMaterial color="#FFFFFF" emissive={accent} emissiveIntensity={0.24} metalness={0.18} roughness={0.14} clearcoat={1} />
       </mesh>
-      <Html position={[0, 1.45, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
-        <div className="scene-center-label">SINC · COMMAND CORE</div>
-      </Html>
     </group>
   );
 }
@@ -596,9 +596,6 @@ function GlassMeetingRoom({ accent }: { accent: string }) {
           <OfficeChair color={accent} position={[0, 0, 0]} />
         </group>
       ))}
-      <Html position={[0, 2.35, -1.48]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
-        <div className="scene-room-sign">DISCUSSION ROOM · 04 SEATS</div>
-      </Html>
     </group>
   );
 }
@@ -666,9 +663,6 @@ function ConferenceRoom({ accent, secondary }: { accent: string; secondary: stri
         <planeGeometry args={[2.16, 0.86]} />
         <meshBasicMaterial color={accent} />
       </mesh>
-      <Html position={[0, 2.8, -2.24]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
-        <div className="scene-room-sign">SINC MEETING ROOM · 08 SEATS</div>
-      </Html>
     </group>
   );
 }
@@ -688,9 +682,6 @@ function ReceptionArch({ accent }: { accent: string }) {
         <boxGeometry args={[4.4, 0.14, 0.18]} />
         <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.55} />
       </mesh>
-      <Html position={[0, 3.05, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
-        <div className="scene-reception-label">AGENTSINC · SINC HEADQUARTERS</div>
-      </Html>
     </group>
   );
 }
@@ -710,9 +701,6 @@ function DisplayWall({ position, accent }: { position: [number, number, number];
         <planeGeometry args={[5.35, 2.05]} />
         <meshBasicMaterial color={accent} transparent opacity={0.12} />
       </mesh>
-      <Html position={[0, 1.75, 0.22]} center distanceFactor={13} style={{ pointerEvents: "none" }}>
-        <div className="scene-display-brand"><strong>AGENT<span>SINC</span></strong><small>INTELLIGENCE · NETWORK · COLLABORATION</small></div>
-      </Html>
     </group>
   );
 }
@@ -1174,15 +1162,15 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
 
   if (!display) {
     return (
-      <mesh position={[0, 1.32, -0.6]}>
-        <planeGeometry args={[0.98, 0.68]} />
+      <mesh position={[0, 1.29, -0.6]}>
+        <planeGeometry args={[0.82, 0.54]} />
         <meshBasicMaterial color="#0B1220" />
       </mesh>
     );
   }
   return (
-    <mesh position={[0, 1.32, -0.598]}>
-      <planeGeometry args={[0.98, 0.68]} />
+    <mesh position={[0, 1.29, -0.598]}>
+      <planeGeometry args={[0.82, 0.54]} />
       <meshBasicMaterial map={display.texture} toneMapped={false} />
     </mesh>
   );
