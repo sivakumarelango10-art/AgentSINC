@@ -122,22 +122,32 @@ Acceptance:
 - Failed or cancelled runs reach a terminal state and are visible.
 - No unrestricted host shell or file tools are enabled.
 
-## Phase 5 — Task lifecycle, approvals and controlled tools
+## Phase 5 — Task lifecycle, approvals and controlled tools (in progress)
 
 **Goal:** move from simulated collaboration to guarded execution.
 
-Deliverables:
-- Task board, dependencies, assignments, evidence and execution history.
-- Human approval queue for privileged actions.
-- Narrow, allowlisted tools with typed inputs and outputs.
-- Isolated sandbox for code execution, with resource and network controls.
-- Audit trail for every tool request, approval and result.
+Implemented in the current local runtime:
+- A role-scoped Agent Harness with a bounded maximum of eight tool calls per specialist mission.
+- Typed built-in repository search/read, Google Search research, approved source-write and fixed test-suite tools.
+- A durable SQLite approval queue. Agents cannot approve their own proposed writes or mutating MCP calls.
+- Atomic, path-confined source writes limited to approved source/test/documentation roots; dependency manifests, secrets and environment files are blocked.
+- Fixed test suites executed only in a configured Docker sandbox with network disabled, a read-only source mount, a disposable tmpfs copy and explicit resource limits.
+- An MCP registry that discovers only founder-configured servers and enforces per-agent tool allowlists; mutating tools are approval-gated.
+- Persisted tool approvals/results and worker-restart handling so an interrupted approval is not silently executed after restart.
+
+Remaining before Phase 5 can be called complete:
+- Configure and verify the founder's required MCP providers and permissions on the actual Windows installation.
+- Run a real Developer write → founder approval → Docker tests cycle on the target repository.
+- Verify cancellation, approval rejection/timeout, Docker-unavailable and worker-restart cases on the founder's machine.
+- Add stronger per-tool budgets, diff review, artifact provenance and a complete audit export.
+- Add authenticated multi-user approver identity before exposing the approval endpoint beyond localhost.
 
 Acceptance:
 - Agents cannot self-approve privileged actions.
 - A cancelled task stops work and records why.
 - Untrusted code cannot access production secrets or the host filesystem.
-- Only approved artifacts can leave the sandbox.
+- Test execution has no network and never falls back to the host shell.
+- Only explicitly approved and allowlisted artifacts/actions can leave the local workspace.
 
 ## Phase 6 — Always-on operations and team collaboration
 
