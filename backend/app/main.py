@@ -89,6 +89,14 @@ def create_app() -> FastAPI:
                 WHERE t.status IN ('queued', 'running')
                 ORDER BY CASE t.status WHEN 'running' THEN 0 ELSE 1 END, t.created_at"""
             ).fetchall()
+            orchestration_agent_ids = set()
+            if active_orchestration:
+                orchestration_agent_ids = {
+                    row["agent_id"] for row in connection.execute(
+                        "SELECT DISTINCT agent_id FROM tasks WHERE orchestration_id=?",
+                        (active_orchestration["id"],),
+                    ).fetchall()
+                }
 
         task_map = {row["id"]: task_to_dict(row) for row in current_tasks}
         latest_activity_by_agent: dict[str, str] = {}
@@ -101,6 +109,9 @@ def create_app() -> FastAPI:
             item = agent_to_dict(row)
             if row["id"] == "team_lead" and active_orchestration:
                 item["currentTask"] = active_orchestration["title"]
+                item["taskStatus"] = "running"
+                item["latestResult"] = active_orchestration["result"]
+                item["latestTaskUpdatedAt"] = active_orchestration["updated_at"]
                 item["progress"] = round(active_orchestration_progress or 0)
                 item["status"] = "paused" if item["paused"] else (
                     "thinking" if active_orchestration["stage"] in ("planning", "synthesizing")
@@ -120,9 +131,19 @@ def create_app() -> FastAPI:
                 agents.append(item)
                 continue
             current = task_map.get(row["current_task_id"])
+            latest_task_row = next(
+                (task for task in task_rows if task["agent_id"] == row["id"]),
+                None,
+            )
+            latest_task = task_to_dict(latest_task_row) if latest_task_row else None
+            displayed_task = current or latest_task
+            if displayed_task:
+                item["currentTask"] = displayed_task["title"]
+                item["taskStatus"] = displayed_task["status"]
+                item["latestResult"] = displayed_task.get("result") or displayed_task.get("error")
+                item["latestTaskUpdatedAt"] = displayed_task["updated_at"]
+                item["progress"] = displayed_task["progress"]
             if current:
-                item["currentTask"] = current["title"]
-                item["progress"] = current["progress"]
                 item["status"] = (
                     "working" if current["status"] == "running"
                     else ("paused" if item["paused"] else "queued")
@@ -134,7 +155,19 @@ def create_app() -> FastAPI:
                 item["status"] = "paused" if item["paused"] else (
                     "queued" if queued else ("failed" if row["status"] == "failed" else "idle")
                 )
-            item["location"] = row["location"]
+            # Specialists assigned under one active Team Lead orchestration physically
+            # gather in the discussion room while child missions run, then in the
+            # conference room while the Team Lead synthesizes their real outputs.
+            # Once synthesis ends, the persisted home destination is restored.
+            if active_orchestration and row["id"] in orchestration_agent_ids:
+                if active_orchestration["stage"] == "executing":
+                    item["location"] = "discussion"
+                elif active_orchestration["stage"] == "synthesizing":
+                    item["location"] = "meeting"
+                else:
+                    item["location"] = row["location"]
+            else:
+                item["location"] = row["location"]
             item["latestActivity"] = latest_activity_by_agent.get(
                 row["id"], "Waiting for a mission assignment."
             )

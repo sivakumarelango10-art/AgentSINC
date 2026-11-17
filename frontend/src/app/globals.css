@@ -670,3 +670,7 @@ html, body { background: #EEF2F6; color: #1D2939; }
 .location-action:hover:not(:disabled), .location-action.selected { border-color: var(--accent); color: #17324E; background: var(--accent-glow); }
 .location-action:disabled { opacity: .48; cursor: not-allowed; }
 .agent-location-control > small { display: block; margin-top: 8px; color: #77869A; font-size: 8px; line-height: 1.45; }
+
+
+/* In-world activity lives on the monitor texture; do not render DOM labels/cards above avatars. */
+.scene-agent-tag, .scene-monitor-ui { display: none !important; }
