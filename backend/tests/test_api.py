@@ -9,7 +9,7 @@ os.environ["AGENTSINC_DB_PATH"] = str(Path("tests") / f"test-{uuid4().hex}.sqlit
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import app  # noqa: E402
-from app.db import set_runtime_value  # noqa: E402
+from app.db import add_event, connect, set_runtime_value  # noqa: E402
 
 
 client = TestClient(app)
@@ -196,3 +196,48 @@ def test_overview_exposes_latest_local_generation_metrics() -> None:
     assert metrics["model"] == "qwen3:4b"
     assert metrics["tokens_per_second"] == 40.0
     assert metrics["generated_tokens"] == 160
+
+
+
+def test_overview_exposes_backend_driven_team_lead_room_and_latest_activity() -> None:
+    created = client.post(
+        "/api/v1/orchestrations",
+        json={
+            "title": "Coordinate the office review",
+            "instructions": "Coordinate a review of the office scene and report specialist findings.",
+        },
+    )
+    assert created.status_code == 201
+    orchestration_id = created.json()["orchestration"]["id"]
+
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='running', stage='executing' WHERE id=?",
+            (orchestration_id,),
+        )
+        add_event(
+            connection,
+            "team_lead",
+            None,
+            "team_lead_location_changed",
+            "Team Lead moved to the discussion room for the specialist handoff.",
+            orchestration_id=orchestration_id,
+        )
+        connection.commit()
+
+    overview = client.get("/api/v1/overview")
+    assert overview.status_code == 200
+    lead = next(item for item in overview.json()["agents"] if item["id"] == "team_lead")
+    assert lead["location"] == "discussion"
+    assert lead["latestActivity"] == "Team Lead moved to the discussion room for the specialist handoff."
+
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET stage='synthesizing' WHERE id=?",
+            (orchestration_id,),
+        )
+        connection.commit()
+
+    next_overview = client.get("/api/v1/overview").json()
+    lead = next(item for item in next_overview["agents"] if item["id"] == "team_lead")
+    assert lead["location"] == "meeting"

@@ -87,6 +87,11 @@ def create_app() -> FastAPI:
             ).fetchall()
 
         task_map = {row["id"]: task_to_dict(row) for row in current_tasks}
+        latest_activity_by_agent: dict[str, str] = {}
+        # event_rows are newest-first; preserve the newest real event for each desk.
+        for event in event_rows:
+            latest_activity_by_agent.setdefault(event["agent_id"], event["message"])
+
         agents = []
         for row in agent_rows:
             item = agent_to_dict(row)
@@ -96,6 +101,17 @@ def create_app() -> FastAPI:
                 item["status"] = "paused" if item["paused"] else (
                     "thinking" if active_orchestration["stage"] in ("planning", "synthesizing")
                     else "collaborating"
+                )
+                # The Team Lead's 3D destination is derived from the persisted
+                # orchestration lifecycle, never from an animation-only timer.
+                stage = active_orchestration["stage"]
+                item["location"] = (
+                    "discussion" if stage == "executing"
+                    else "meeting" if stage == "synthesizing"
+                    else "command"
+                )
+                item["latestActivity"] = latest_activity_by_agent.get(
+                    row["id"], "Team Lead is coordinating the current request."
                 )
                 agents.append(item)
                 continue
@@ -114,6 +130,10 @@ def create_app() -> FastAPI:
                 item["status"] = "paused" if item["paused"] else (
                     "queued" if queued else ("failed" if row["status"] == "failed" else "idle")
                 )
+            item["location"] = "command" if row["id"] in ("ceo", "team_lead") else "desk"
+            item["latestActivity"] = latest_activity_by_agent.get(
+                row["id"], "Waiting for a mission assignment."
+            )
             agents.append(item)
 
         state = {row["key"]: {"value": row["value"], "updated_at": row["updated_at"]} for row in runtime_rows}

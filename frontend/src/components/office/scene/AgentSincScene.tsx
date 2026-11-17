@@ -30,6 +30,25 @@ const roomLayout = [
   { id: "quality", label: "QUALITY LAB", agentId: "tester", position: [6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#16A34A" },
 ];
 
+const officeLocationTargets: Record<string, Record<string, [number, number, number]>> = {
+  discussion: {
+    ceo: [-1.65, 0, 4.15],
+    team_lead: [0, 0, 4.15],
+    developer: [-1.05, 0, 3.5],
+    designer: [1.05, 0, 3.5],
+    researcher: [-1.05, 0, 4.9],
+    tester: [1.05, 0, 4.9],
+  },
+  meeting: {
+    ceo: [0, 0, 6.15],
+    team_lead: [0, 0, 7.6],
+    developer: [-1.85, 0, 7.6],
+    designer: [1.85, 0, 7.6],
+    researcher: [-1.85, 0, 8.3],
+    tester: [1.85, 0, 8.3],
+  },
+};
+
 const roomTargets: Record<string, [number, number, number]> = {
   all: [0, 0.55, 0],
   command: [0, 0.65, -4.5],
@@ -373,12 +392,20 @@ function WorkDesk({
         <planeGeometry args={[0.98, 0.68]} />
         <meshBasicMaterial color={agent?.status === "working" ? "#D9F7FF" : "#B9D7F2"} />
       </mesh>
-      <Html position={[0, 1.32, -0.545]} center transform distanceFactor={10} style={{ pointerEvents: "none" }}>
+      <Html position={[0, 1.32, -0.545]} center transform distanceFactor={8} style={{ pointerEvents: "none" }}>
         <div className="scene-monitor-ui">
-          <div className="scene-monitor-top"><i />SINC · LIVE DESK</div>
+          <div className="scene-monitor-top"><i />SINC · LIVE WORKSTATION</div>
           <strong>{agent ? STATUS_LABELS[agent.status].toUpperCase() : "AVAILABLE"}</strong>
-          <small>{agent?.currentTask && agent.currentTask !== "No active mission assigned" ? agent.currentTask : "READY FOR ASSIGNMENT"}</small>
+          <small className="scene-monitor-task">
+            {agent?.currentTask && agent.currentTask !== "No active mission assigned"
+              ? agent.currentTask
+              : "READY FOR ASSIGNMENT"}
+          </small>
+          <small className="scene-monitor-activity">
+            {agent?.latestActivity || "Waiting for a new mission assignment."}
+          </small>
           <div className="scene-monitor-progress"><i style={{ width: String(agent?.progress ?? 0) + "%" }} /></div>
+          <span className="scene-monitor-percent">{agent?.progress ?? 0}% complete</span>
         </div>
       </Html>
       <mesh position={[0, 0.87, -0.59]}>
@@ -733,17 +760,48 @@ function AgentAvatar({
   const leftArmRef = useRef<THREE.Group>(null);
   const rightArmRef = useRef<THREE.Group>(null);
   const haloRef = useRef<THREE.Mesh>(null);
+  const leftLegRef = useRef<THREE.Group>(null);
+  const rightLegRef = useRef<THREE.Group>(null);
+  const homePosition: [number, number, number] = [
+    agent.position[0], 0, agent.position[2] + 1.1,
+  ];
+  const destination = agent.location === "discussion" || agent.location === "meeting"
+    ? officeLocationTargets[agent.location]?.[agent.id] ?? homePosition
+    : homePosition;
   const bobOffset = useMemo(() => agent.position[0] * 0.13, [agent.position]);
   const skinTone = agent.id === "researcher" ? "#B97852" : agent.id === "designer" ? "#D69B76" : agent.id === "tester" ? "#C58C69" : "#D29A75";
   const hairTone = agent.id === "designer" ? "#302322" : agent.id === "researcher" ? "#241D19" : "#302A28";
   const wearsGlasses = agent.id === "tester" || agent.id === "researcher";
   const isPaused = agent.status === "paused";
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const time = clock.elapsedTime;
     const breathing = Math.sin(time * 1.65 + bobOffset) * 0.012;
-    if (groupRef.current) groupRef.current.position.y = Math.sin(time * 1.8 + bobOffset) * 0.012;
-    if (torsoRef.current) torsoRef.current.position.y = 1.02 + breathing;
+    let walking = false;
+    if (groupRef.current) {
+      const currentX = groupRef.current.position.x;
+      const currentZ = groupRef.current.position.z;
+      const remaining = Math.hypot(destination[0] - currentX, destination[2] - currentZ);
+      walking = remaining > 0.075;
+      groupRef.current.position.x = THREE.MathUtils.damp(currentX, destination[0], 1.55, delta);
+      groupRef.current.position.z = THREE.MathUtils.damp(currentZ, destination[2], 1.55, delta);
+      groupRef.current.position.y = walking
+        ? Math.abs(Math.sin(time * 10 + bobOffset)) * 0.045
+        : Math.sin(time * 1.8 + bobOffset) * 0.012;
+      const heading = walking
+        ? Math.atan2(destination[0] - currentX, destination[2] - currentZ)
+        : Math.PI;
+      groupRef.current.rotation.y = THREE.MathUtils.damp(
+        groupRef.current.rotation.y, heading, 7, delta
+      );
+    }
+    if (torsoRef.current) {
+      torsoRef.current.position.y = 1.02 + breathing;
+      torsoRef.current.rotation.x = walking ? -0.075 : 0;
+    }
+    const stride = walking ? Math.sin(time * 10 + bobOffset) * 0.42 : 0;
+    if (leftLegRef.current) leftLegRef.current.rotation.x = stride;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = -stride;
     if (headRef.current) {
       const thinkingTilt = agent.status === "thinking" ? 0.09 : 0;
       headRef.current.rotation.z = thinkingTilt + Math.sin(time * 0.7 + bobOffset) * 0.012;
@@ -751,12 +809,13 @@ function AgentAvatar({
     }
     const workMotion = agent.status === "working" ? Math.sin(time * 3.2 + bobOffset) * 0.045 : 0;
     const talkMotion = agent.status === "collaborating" ? Math.sin(time * 2.2 + bobOffset) * 0.08 : 0;
+    const walkArmSwing = walking ? Math.sin(time * 10 + bobOffset) * 0.24 : 0;
     if (leftArmRef.current) {
-      leftArmRef.current.rotation.x = -0.12 + workMotion - talkMotion;
+      leftArmRef.current.rotation.x = -0.12 + workMotion - talkMotion + walkArmSwing;
       leftArmRef.current.rotation.z = 0.12 + (isPaused ? 0 : talkMotion * 0.35);
     }
     if (rightArmRef.current) {
-      rightArmRef.current.rotation.x = -0.12 - workMotion + talkMotion;
+      rightArmRef.current.rotation.x = -0.12 - workMotion + talkMotion - walkArmSwing;
       rightArmRef.current.rotation.z = -0.12 - (isPaused ? 0 : talkMotion * 0.35);
     }
     if (haloRef.current) {
@@ -772,7 +831,7 @@ function AgentAvatar({
 
   return (
     <group
-      position={[agent.position[0], 0, agent.position[2] + 1.1]}
+      position={homePosition}
       rotation={[0, Math.PI, 0]}
       onClick={handleSelect}
       ref={groupRef}
@@ -868,8 +927,12 @@ function AgentAvatar({
         ) : null}
       </group>
 
-      {[-0.13, 0.13].map((side) => (
-        <group key={side} position={[side, 0.72, 0.05]}>
+      {[-0.13, 0.13].map((side, index) => (
+        <group
+          key={side}
+          ref={index === 0 ? leftLegRef : rightLegRef}
+          position={[side, 0.72, 0.05]}
+        >
           <mesh castShadow position={[0, -0.02, 0.24]} rotation={[Math.PI / 2, 0, 0]}>
             <capsuleGeometry args={[0.09, 0.34, 6, 12]} />
             <meshPhysicalMaterial color="#45536A" roughness={0.86} />
