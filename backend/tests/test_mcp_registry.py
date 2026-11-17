@@ -127,5 +127,5 @@ def test_stdio_mcp_server_inherits_parent_path_and_explicit_secrets(monkeypatch)
     config = load_mcp_config()[0]
     target = MCPRegistry()._target(config)
     assert target.env["PATH"] == "C:\\Tools\\Docker;C:\\Windows\\System32"
-    assert target.env["MCP_PARENT_TEST"] == "inherited-value"
+    assert "MCP_PARENT_TEST" not in target.env
     assert target.env["GITHUB_PERSONAL_ACCESS_TOKEN"] == "inherited-value"
