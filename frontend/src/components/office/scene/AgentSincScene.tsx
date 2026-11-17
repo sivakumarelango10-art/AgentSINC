@@ -1071,6 +1071,7 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
 
     const { canvas } = display;
     const width = canvas.width;
+    const height = canvas.height;
     const status = agent?.taskStatus ?? "idle";
     const accent = agent?.color ?? "#2676E8";
     const title = agent?.currentTask && agent.currentTask !== "No active mission assigned"

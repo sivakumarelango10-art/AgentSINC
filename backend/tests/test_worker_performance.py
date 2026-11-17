@@ -11,6 +11,7 @@ from app import worker
 
 def test_specialist_request_uses_local_performance_limits_and_records_metrics(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("AGENTSINC_DB_PATH", str(tmp_path / "worker-performance.sqlite3"))
+    monkeypatch.setenv("AGENTSINC_AGENT_HARNESS_ENABLED", "false")
     init_db()
     task = create_task(
         "developer",

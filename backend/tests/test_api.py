@@ -290,6 +290,14 @@ def test_team_lead_cannot_be_manually_moved_during_active_orchestration() -> Non
 
 
 def test_orchestrated_specialists_move_to_discussion_then_meeting_then_return_home() -> None:
+    # Earlier API tests may have left an orchestration active in the shared test DB.
+    # Make this lifecycle test independent of their order.
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='completed', stage='completed' WHERE status='running'"
+        )
+        connection.commit()
+
     created = client.post(
         "/api/v1/orchestrations",
         json={
