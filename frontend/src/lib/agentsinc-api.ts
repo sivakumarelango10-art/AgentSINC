@@ -192,3 +192,34 @@ export function moveAgent(agentId: string, location: AgentLocation): Promise<{
     body: JSON.stringify({ location }),
   });
 }
+
+
+export type AgentApprovalStatus = "pending" | "approved" | "rejected" | "failed";
+
+export type AgentApproval = {
+  id: string;
+  task_id: string;
+  agent_id: string;
+  tool_name: string;
+  payload: Record<string, unknown>;
+  status: AgentApprovalStatus;
+  result: string | null;
+  created_at: string;
+  resolved_at: string | null;
+};
+
+export function getApprovals(status: AgentApprovalStatus | "all" = "pending"): Promise<{
+  approvals: AgentApproval[];
+}> {
+  return request(`/api/v1/approvals?status=${encodeURIComponent(status)}`);
+}
+
+export function resolveApproval(
+  approvalId: string,
+  action: "approve" | "reject",
+): Promise<{ approval: AgentApproval; error?: string }> {
+  return request(`/api/v1/approvals/${encodeURIComponent(approvalId)}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
