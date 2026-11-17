@@ -179,3 +179,10 @@ The runtime remains a local-first development system: SQLite, localhost API, loc
 Ollama local inference and this runtime do not charge per model call. Your computer supplies the CPU/GPU, RAM, storage, electricity and network connection. For continuous operation, Windows must stay awake, Ollama/API/worker must remain running, and the computer must remain powered and connected. If the PC sleeps, shuts down, loses power or loses connectivity, the worker pauses. This is a 24/7-capable local setup, not a guaranteed cloud SLA.
 
 A free cloud web tier is not a dependable substitute for the always-on worker. Public remote access, multi-user authentication, backup/restore, sandboxing and production monitoring are later phases.
+
+
+## GitHub development pipeline
+
+AgentSINC can use the official GitHub MCP server when it is configured explicitly in `backend/.env`. The Team Lead sequences implementation, QA and publishing as separate specialist tasks. The Developer can create a feature branch and propose a GitHub file push only after the QA Agent has recorded a passing Docker test run. A pull request can be opened only after a successful feature-branch push. Each remote mutation pauses for founder approval, and agent merge operations are blocked.
+
+See [GitHub development workflow](../docs/GITHUB_DEVELOPMENT_WORKFLOW.md) for Docker setup, the role-specific allowlist, required repository permissions and local verification steps. The Settings panel also exposes live MCP connection and tool-discovery status.
