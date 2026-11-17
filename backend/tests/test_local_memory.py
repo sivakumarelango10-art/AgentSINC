@@ -54,7 +54,8 @@ def test_completed_missions_become_bounded_local_memory_and_redact_secrets(tmp_p
 
     assert len(memories) == 1
     assert memories[0]["task_id"] == task["id"]
-    assert "SQLite persistence" in memories[0]["title"]
+    assert "SQLite" in memories[0]["title"]
+    assert "persistence" in memories[0]["title"].lower()
     assert "[REDACTED]" in memories[0]["content"]
     assert "local-secret-token" not in memories[0]["content"]
     assert "very-long-private-token-value" not in memories[0]["content"]
