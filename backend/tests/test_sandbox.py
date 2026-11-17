@@ -85,3 +85,24 @@ def test_sandbox_status_explains_unreachable_docker_engine(monkeypatch) -> None:
     assert status["available"] is False
     assert status["docker_daemon_available"] is False
     assert "engine is not reachable" in status["reason"]
+
+
+
+def test_frontend_build_copies_dependencies_inside_turbopack_workspace() -> None:
+    from app.sandbox import TEST_SUITES, _build_workspace_bootstrap
+
+    working_directory, command = TEST_SUITES["frontend-build"]
+    bootstrap = _build_workspace_bootstrap(working_directory, command)
+
+    assert "cp -a /opt/agentsinc/frontend/node_modules /tmp/agentsinc-workspace/frontend/node_modules" in bootstrap
+    assert "ln -s /opt/agentsinc/frontend/node_modules" not in bootstrap
+    assert "cd /tmp/agentsinc-workspace/frontend; npm run build" in bootstrap
+
+
+def test_python_suite_does_not_copy_frontend_dependencies() -> None:
+    from app.sandbox import TEST_SUITES, _build_workspace_bootstrap
+
+    working_directory, command = TEST_SUITES["python-tests"]
+    bootstrap = _build_workspace_bootstrap(working_directory, command)
+
+    assert "cp -a /opt/agentsinc/frontend/node_modules" not in bootstrap
