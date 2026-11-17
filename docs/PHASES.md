@@ -135,6 +135,13 @@ Implemented in the current local runtime:
 - An MCP registry that discovers only founder-configured servers and enforces per-agent tool allowlists; mutating tools are approval-gated.
 - Persisted tool approvals/results and worker-restart handling so an interrupted approval is not silently executed after restart.
 
+- A GitHub-aware Team Lead sequence for requested code delivery: Developer implementation → Tester validation → Developer release.
+- GitHub MCP tools can be role-scoped so QA receives read-only repository/PR access while Developer receives explicit branch/push/PR capabilities.
+- Remote file pushes are blocked until a successful QA test event is recorded; pull requests are blocked until a successful feature-branch push is recorded.
+- Every mutating GitHub tool call requires founder approval; agent pull-request merging is denied.
+- Team Lead synthesis receives persisted specialist tool events and verifies test status, pushed branch and pull-request link before claiming delivery.
+- Settings displays live MCP connectivity and the tools discovered for Developer and QA.
+
 Remaining before Phase 5 can be called complete:
 - Configure and verify the founder's required MCP providers and permissions on the actual Windows installation.
 - Run a real Developer write → founder approval → Docker tests cycle on the target repository.
