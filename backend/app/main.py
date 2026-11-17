@@ -74,6 +74,33 @@ def create_app() -> FastAPI:
             connection.execute("SELECT 1").fetchone()
         return {"status": "ok", "service": "agentsinc-local-runtime"}
 
+    @app.get("/api/v1/integrations/mcp")
+    async def mcp_integration_status() -> dict:
+        try:
+            registry = MCPRegistry()
+        except MCPRegistryError as exc:
+            return {"configured_count": 0, "servers": [], "error": str(exc)}
+
+        role_results: dict[str, list[dict]] = {}
+        for role in ("developer", "tester"):
+            try:
+                role_results[role] = await registry.discover(role)
+            except MCPRegistryError as exc:
+                role_results[role] = [{"name": "", "description": f"Discovery failed ({type(exc).__name__}).", "unavailable": True}]
+
+        servers = []
+        for config in registry.servers:
+            agents = {}
+            for role in ("developer", "tester"):
+                if role not in config["roles"]:
+                    continue
+                matching = [item for item in role_results.get(role, []) if item.get("name", "").startswith(f'mcp.{config["name"]}.')]
+                error = next((item["description"] for item in matching if item.get("unavailable")), None)
+                tools = sorted(item["tool_name"] for item in matching if not item.get("unavailable") and item.get("tool_name"))
+                agents[role] = {"connected": bool(tools) and error is None, "tools": tools, "error": error}
+            servers.append({"name": config["name"], "transport": config["transport"], "roles": config["roles"], "agents": agents})
+        return {"configured_count": len(servers), "servers": servers, "error": None}
+
     @app.get("/api/v1/overview")
     async def overview() -> dict:
         with connect() as connection:
