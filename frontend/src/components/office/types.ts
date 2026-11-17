@@ -23,8 +23,13 @@ export type OfficeAgent = {
   position: [number, number, number];
   /** Current destination derived from the persisted backend workflow state. */
   location?: "desk" | "command" | "discussion" | "meeting";
-  /** Most recent persisted event for this agent, shown on the in-world workstation. */
+  /** Most recent persisted event for this agent, rendered on its physical monitor. */
   latestActivity?: string;
+  /** Status of the most recent task, including the last completed task while idle. */
+  taskStatus?: "queued" | "running" | "completed" | "failed" | "cancelled";
+  /** Actual latest task result/error. Never replaced with a generated activity placeholder. */
+  latestResult?: string | null;
+  latestTaskUpdatedAt?: string | null;
   paused?: boolean;
 };
 

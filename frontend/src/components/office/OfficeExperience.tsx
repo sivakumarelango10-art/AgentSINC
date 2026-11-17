@@ -19,11 +19,14 @@ import {
   getOverview,
   getWorkspaceSummary,
   moveAgent,
+  getApprovals,
+  resolveApproval,
   retryMission,
   type AgentEvent,
   type AgentOrchestration,
   type AgentTask,
   type AgentLocation,
+  type AgentApproval,
   type RuntimeStatus,
   type WorkspaceSummary,
 } from "@/lib/agentsinc-api";
@@ -81,7 +84,7 @@ const panelTitles: Record<PanelKey, { eyebrow: string; title: string; subtitle: 
   tasks: { eyebrow: "WORK IN MOTION", title: "Mission board", subtitle: "Persistent missions stored by the local runtime." },
   activity: { eyebrow: "LIVE SIGNAL", title: "Office activity", subtitle: "Timestamped events emitted by the API and worker." },
   team: { eyebrow: "THE PEOPLE BEHIND SINC", title: "Our team", subtitle: "Human teammates and their current roles." },
-  approvals: { eyebrow: "HUMAN CONTROL", title: "Approval queue", subtitle: "External actions remain disabled until an approval system is implemented." },
+  approvals: { eyebrow: "HUMAN CONTROL", title: "Approval queue", subtitle: "Review real agent code edits and external MCP actions before they execute." },
   settings: { eyebrow: "LOCAL RUNTIME", title: "Studio settings", subtitle: "Inspect Ollama, worker health and the selected local model." },
 };
 
@@ -122,6 +125,7 @@ export function OfficeExperience() {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
   const [orchestrations, setOrchestrations] = useState<AgentOrchestration[]>([]);
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  const [approvals, setApprovals] = useState<AgentApproval[]>([]);
   const [runtime, setRuntime] = useState<RuntimeStatus>(disconnectedRuntime);
   const [runtimeError, setRuntimeError] = useState("Start the local API and worker to enable real agent work.");
   const [selectedAgentId, setSelectedAgentId] = useState("ceo");
@@ -155,6 +159,15 @@ export function OfficeExperience() {
         ? "OLLAMA OFFLINE"
         : "LOCAL AGENTS ONLINE";
 
+  const refreshApprovals = async () => {
+    try {
+      const snapshot = await getApprovals("pending");
+      setApprovals(snapshot.approvals);
+    } catch {
+      setApprovals([]);
+    }
+  };
+
   const refreshOverview = async () => {
     try {
       const snapshot = await getOverview();
@@ -172,6 +185,7 @@ export function OfficeExperience() {
       setOrchestrations([]);
       setEvents([]);
     }
+    await refreshApprovals();
   };
 
   useEffect(() => {
@@ -206,7 +220,11 @@ export function OfficeExperience() {
     };
 
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 2500);
+    void refreshApprovals();
+    const timer = window.setInterval(() => {
+      void refresh();
+      void refreshApprovals();
+    }, 2500);
     return () => {
       disposed = true;
       window.clearInterval(timer);
@@ -336,6 +354,24 @@ export function OfficeExperience() {
     }
   };
 
+  const decideApproval = async (approval: AgentApproval, action: "approve" | "reject") => {
+    setBusyAction(`approval-${approval.id}`);
+    setNotice("");
+    try {
+      const response = await resolveApproval(approval.id, action);
+      setNotice(response.error || (
+        action === "approve"
+          ? `Approved action ${approval.tool_name} completed.`
+          : `Rejected action ${approval.tool_name}; no change was made.`
+      ));
+      await refreshOverview();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not resolve this approval.");
+    } finally {
+      setBusyAction("");
+    }
+  };
+
   const setModel = async (model: string) => {
     if (!model) return;
     setBusyAction("model");
@@ -422,6 +458,7 @@ export function OfficeExperience() {
             {item.id === "agents" ? <small>{agents.length.toString().padStart(2, "0")}</small> : null}
             {item.id === "tasks" ? <small>{activeMissionCount.toString().padStart(2, "0")}</small> : null}
             {item.id === "team" ? <small>11</small> : null}
+            {item.id === "approvals" && approvals.length ? <small>{approvals.length.toString().padStart(2, "0")}</small> : null}
           </button>
         ))}
         <div className="rail-spacer" />
@@ -544,11 +581,12 @@ export function OfficeExperience() {
           ) : null}
 
           {activePanel === "approvals" ? (
-            <div className="panel-empty">
-              <span className="empty-symbol">◇</span>
-              <strong>No external tools are enabled</strong>
-              <p>File edits, repository writes, deployments and messages are intentionally disabled until the isolated execution sandbox and human approval flow are implemented.</p>
-            </div>
+            <ApprovalsPanel
+              approvals={approvals}
+              busyAction={busyAction}
+              notice={notice}
+              onResolve={decideApproval}
+            />
           ) : null}
 
           {activePanel === "settings" ? (
@@ -1096,6 +1134,88 @@ function OfficeMap2D({
       })}
       <div className="map-caption">FLOOR 01 · SELECT A DEPARTMENT TO EXPLORE</div>
       <button className="map-return-3d" onClick={onReturnTo3D}>RETURN TO 3D ↗</button>
+    </div>
+  );
+}
+
+
+
+function ApprovalsPanel({
+  approvals,
+  busyAction,
+  notice,
+  onResolve,
+}: {
+  approvals: AgentApproval[];
+  busyAction: string;
+  notice: string;
+  onResolve: (approval: AgentApproval, action: "approve" | "reject") => void;
+}) {
+  const agentNames: Record<string, string> = {
+    developer: "Dev Agent",
+    designer: "Design Agent",
+    researcher: "Research Agent",
+    tester: "QA Agent",
+  };
+
+  if (!approvals.length) {
+    return (
+      <div className="panel-empty">
+        <span className="empty-symbol">◇</span>
+        <strong>No pending approvals</strong>
+        <p>When an agent proposes a real source edit or a write-enabled MCP action, it will pause here until you approve or reject it.</p>
+        {notice ? <div className="runtime-notice">{notice}</div> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="panel-content approval-list">
+      <div className="approval-intro">
+        <strong>{approvals.length} action{approvals.length === 1 ? "" : "s"} awaiting your decision</strong>
+        <p>Nothing in this list has been applied yet. Approving an action executes the exact stored proposal.</p>
+      </div>
+      {approvals.map((approval) => {
+        const payload = approval.payload ?? {};
+        const filePath = typeof payload.path === "string" ? payload.path : "";
+        const summary = typeof payload.summary === "string" ? payload.summary : "";
+        const serverName = typeof payload.server_name === "string" ? payload.server_name : "";
+        const mcpTool = typeof payload.tool_name === "string" ? payload.tool_name : "";
+        const key = `approval-${approval.id}`;
+        return (
+          <article className="approval-card" key={approval.id}>
+            <div className="approval-card-topline">
+              <span>{agentNames[approval.agent_id] ?? approval.agent_id}</span>
+              <time>{formatTime(approval.created_at)}</time>
+            </div>
+            <h3>{approval.tool_name}</h3>
+            {filePath ? <p className="approval-file-path">{filePath}</p> : null}
+            {serverName || mcpTool ? <p className="approval-file-path">{serverName}.{mcpTool}</p> : null}
+            {summary ? <p>{summary}</p> : null}
+            {typeof payload.content === "string" ? (
+              <pre className="approval-code-preview">{payload.content.slice(0, 5000)}{payload.content.length > 5000 ? "\n… preview truncated" : ""}</pre>
+            ) : null}
+            <p className="approval-task-id">Task {approval.task_id.slice(0, 8)}</p>
+            <div className="approval-actions">
+              <button
+                className="runtime-action"
+                disabled={busyAction === key}
+                onClick={() => onResolve(approval, "reject")}
+              >
+                {busyAction === key ? "Resolving…" : "Reject"}
+              </button>
+              <button
+                className="runtime-action primary"
+                disabled={busyAction === key}
+                onClick={() => onResolve(approval, "approve")}
+              >
+                {busyAction === key ? "Resolving…" : "Approve and execute"}
+              </button>
+            </div>
+          </article>
+        );
+      })}
+      {notice ? <div className="runtime-notice">{notice}</div> : null}
     </div>
   );
 }

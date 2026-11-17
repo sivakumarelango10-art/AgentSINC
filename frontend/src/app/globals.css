@@ -670,3 +670,23 @@ html, body { background: #EEF2F6; color: #1D2939; }
 .location-action:hover:not(:disabled), .location-action.selected { border-color: var(--accent); color: #17324E; background: var(--accent-glow); }
 .location-action:disabled { opacity: .48; cursor: not-allowed; }
 .agent-location-control > small { display: block; margin-top: 8px; color: #77869A; font-size: 8px; line-height: 1.45; }
+
+
+/* In-world activity lives on the monitor texture; do not render DOM labels/cards above avatars. */
+.scene-agent-tag, .scene-monitor-ui { display: none !important; }
+
+
+.approval-list { display: flex; flex-direction: column; gap: 10px; }
+.approval-intro { padding: 11px 12px; border: 1px solid rgba(245, 158, 11, .22); border-radius: 10px; background: rgba(245, 158, 11, .06); }
+.approval-intro strong { color: #F8D38A; font-size: 11px; }
+.approval-intro p { margin: 6px 0 0; color: #AAB8CD; font-size: 9px; line-height: 1.5; }
+.approval-card { padding: 12px; border: 1px solid rgba(148, 163, 184, .18); border-radius: 11px; background: rgba(255,255,255,.035); }
+.approval-card-topline { display: flex; justify-content: space-between; gap: 8px; color: #AFC0D6; font-size: 8px; }
+.approval-card-topline time { color: #788CA8; }
+.approval-card h3 { margin: 8px 0 5px; color: #F1F5FC; font-size: 12px; font-weight: 700; }
+.approval-card p { margin: 5px 0; color: #AABBD0; font-size: 9px; line-height: 1.5; }
+.approval-card .approval-file-path { color: #9EDCF2; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.approval-card .approval-task-id { color: #7488A3; font-size: 8px; }
+.approval-code-preview { max-height: 190px; overflow: auto; padding: 9px; border: 1px solid rgba(148,163,184,.15); border-radius: 7px; color: #DCE8F7; background: #0B1220; font: 8px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.approval-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 10px; }
+.approval-actions .runtime-action { min-height: 30px; padding: 0 10px; font-size: 8px; }

@@ -1,10 +1,10 @@
 "use client";
 
 import { Html, OrbitControls } from "@react-three/drei";
-import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { STATUS_LABELS, type OfficeAgent } from "../types";
+import type { OfficeAgent } from "../types";
 
 type Palette = {
   label: string;
@@ -74,6 +74,61 @@ export function AgentSincScene({
   focusedRoom,
 }: SceneProps) {
   const roomTarget = roomTargets[focusedRoom] ?? roomTargets.all;
+  const { camera } = useThree();
+  const controlsRef = useRef<any>(null);
+  const avatarRefs = useRef<Record<string, THREE.Group | null>>({});
+  const followState = useRef({
+    selectedId: null as string | null,
+    previousPosition: new THREE.Vector3(),
+    focusRemaining: 0,
+  });
+
+  // A click briefly eases the view onto the selected agent. While it walks,
+  // the camera follows only the avatar's world-space displacement, preserving
+  // the user's orbit angle and zoom after the initial focus.
+  useFrame((_, delta) => {
+    if (!selectedAgentId) {
+      followState.current.selectedId = null;
+      return;
+    }
+    const avatar = avatarRefs.current[selectedAgentId];
+    if (!avatar) return;
+    const state = followState.current;
+    if (state.selectedId !== selectedAgentId) {
+      state.selectedId = selectedAgentId;
+      state.previousPosition.copy(avatar.position);
+      state.focusRemaining = 1.35;
+    }
+    const target = new THREE.Vector3(
+      avatar.position.x,
+      avatar.position.y + 1.12,
+      avatar.position.z,
+    );
+    if (state.focusRemaining > 0) {
+      const cameraGoal = target.clone().add(new THREE.Vector3(4.6, 3.15, 6.0));
+      const blend = 1 - Math.exp(-3.8 * delta);
+      camera.position.lerp(cameraGoal, blend);
+      if (controlsRef.current) {
+        controlsRef.current.target.lerp(target, blend);
+        controlsRef.current.update();
+      } else {
+        camera.lookAt(target);
+      }
+      state.focusRemaining = Math.max(0, state.focusRemaining - delta);
+    } else {
+      const movement = avatar.position.clone().sub(state.previousPosition);
+      if (movement.lengthSq() > 0.000001) {
+        camera.position.add(movement);
+        if (controlsRef.current) {
+          controlsRef.current.target.add(movement);
+          controlsRef.current.update();
+        } else {
+          camera.lookAt(target);
+        }
+      }
+    }
+    state.previousPosition.copy(avatar.position);
+  });
 
   return (
     <>
@@ -129,10 +184,12 @@ export function AgentSincScene({
           agent={agent}
           selected={agent.id === selectedAgentId}
           onSelect={onSelectAgent}
+          registerAvatar={(node) => { avatarRefs.current[agent.id] = node; }}
         />
       ))}
 
       <OrbitControls
+        ref={controlsRef}
         makeDefault
         target={roomTarget}
         enableDamping
@@ -394,26 +451,7 @@ function WorkDesk({
         <boxGeometry args={[1.12, 0.82, 0.09]} />
         <meshPhysicalMaterial color="#202C3D" metalness={0.62} roughness={0.17} clearcoat={0.85} />
       </mesh>
-      <mesh position={[0, 1.32, -0.6]}>
-        <planeGeometry args={[0.98, 0.68]} />
-        <meshBasicMaterial color={agent?.status === "working" ? "#D9F7FF" : "#B9D7F2"} />
-      </mesh>
-      <Html position={[0, 1.32, -0.545]} center transform distanceFactor={8} style={{ pointerEvents: "none" }}>
-        <div className="scene-monitor-ui">
-          <div className="scene-monitor-top"><i />SINC · LIVE WORKSTATION</div>
-          <strong>{agent ? STATUS_LABELS[agent.status].toUpperCase() : "AVAILABLE"}</strong>
-          <small className="scene-monitor-task">
-            {agent?.currentTask && agent.currentTask !== "No active mission assigned"
-              ? agent.currentTask
-              : "READY FOR ASSIGNMENT"}
-          </small>
-          <small className="scene-monitor-activity">
-            {agent?.latestActivity || "Waiting for a new mission assignment."}
-          </small>
-          <div className="scene-monitor-progress"><i style={{ width: String(agent?.progress ?? 0) + "%" }} /></div>
-          <span className="scene-monitor-percent">{agent?.progress ?? 0}% complete</span>
-        </div>
-      </Html>
+      <WorkstationScreen agent={agent} />
       <mesh position={[0, 0.87, -0.59]}>
         <boxGeometry args={[0.1, 0.13, 0.11]} />
         <meshStandardMaterial color="#AAB4C0" metalness={0.68} roughness={0.28} />
@@ -755,10 +793,12 @@ function AgentAvatar({
   agent,
   selected,
   onSelect,
+  registerAvatar,
 }: {
   agent: OfficeAgent;
   selected: boolean;
   onSelect: (id: string) => void;
+  registerAvatar: (node: THREE.Group | null) => void;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const torsoRef = useRef<THREE.Group>(null);
@@ -768,6 +808,7 @@ function AgentAvatar({
   const haloRef = useRef<THREE.Mesh>(null);
   const leftLegRef = useRef<THREE.Group>(null);
   const rightLegRef = useRef<THREE.Group>(null);
+  const sitPoseRef = useRef(0);
   const homePosition: [number, number, number] = [
     agent.position[0], 0, agent.position[2] + 1.1,
   ];
@@ -796,20 +837,35 @@ function AgentAvatar({
       groupRef.current.position.y = walking
         ? Math.abs(Math.sin(time * 10 + bobOffset)) * 0.045
         : Math.sin(time * 1.8 + bobOffset) * 0.012;
+      const socialCenter = agent.location === "discussion"
+        ? [0, 0, 4.15] as [number, number, number]
+        : agent.location === "meeting"
+          ? [0, 0, 7.6] as [number, number, number]
+          : null;
       const heading = walking
         ? Math.atan2(destination[0] - currentX, destination[2] - currentZ)
-        : Math.PI;
+        : socialCenter
+          ? Math.atan2(socialCenter[0] - currentX, socialCenter[2] - currentZ)
+          : Math.PI;
       groupRef.current.rotation.y = THREE.MathUtils.damp(
         groupRef.current.rotation.y, heading, 7, delta
       );
     }
+    const destinationIsSeat = agent.location === "desk" ||
+      agent.location === "discussion" || agent.location === "meeting";
+    const wantsToSit = !walking && destinationIsSeat &&
+      agent.status !== "paused" && agent.status !== "failed";
+    sitPoseRef.current = THREE.MathUtils.damp(
+      sitPoseRef.current, wantsToSit ? 1 : 0, 5.5, delta
+    );
+    const sitPose = sitPoseRef.current;
     if (torsoRef.current) {
-      torsoRef.current.position.y = 1.02 + breathing;
-      torsoRef.current.rotation.x = walking ? -0.075 : 0;
+      torsoRef.current.position.y = 1.02 - sitPose * 0.13 + breathing;
+      torsoRef.current.rotation.x = walking ? -0.075 : sitPose * 0.035;
     }
     const stride = walking ? Math.sin(time * 10 + bobOffset) * 0.42 : 0;
-    if (leftLegRef.current) leftLegRef.current.rotation.x = stride;
-    if (rightLegRef.current) rightLegRef.current.rotation.x = -stride;
+    if (leftLegRef.current) leftLegRef.current.rotation.x = stride - sitPose * 0.22;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = -stride - sitPose * 0.22;
     if (headRef.current) {
       const thinkingTilt = agent.status === "thinking" ? 0.09 : 0;
       headRef.current.rotation.z = thinkingTilt + Math.sin(time * 0.7 + bobOffset) * 0.012;
@@ -842,7 +898,10 @@ function AgentAvatar({
       position={homePosition}
       rotation={[0, Math.PI, 0]}
       onClick={handleSelect}
-      ref={groupRef}
+      ref={(node) => {
+        groupRef.current = node;
+        registerAvatar(node);
+      }}
     >
       <mesh ref={haloRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.075, 0]}>
         <torusGeometry args={[selected ? 0.72 : 0.56, selected ? 0.038 : 0.022, 10, 56]} />
@@ -985,12 +1044,174 @@ function AgentAvatar({
         </mesh>
       </group>
 
-      <Html position={[0, 2.18, 0]} center distanceFactor={15} style={{ pointerEvents: "none" }}>
-        <div className={selected ? "scene-agent-tag selected" : "scene-agent-tag"} style={{ "--agent-color": agent.color } as React.CSSProperties}>
-          <span>{agent.name}</span>
-          <small>{STATUS_LABELS[agent.status]}</small>
-        </div>
-      </Html>
     </group>
   );
+}
+
+
+/** Paint the live task view onto the actual monitor plane. There is no DOM
+ * overlay or second floating panel in the 3D scene. */
+function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
+  const display = useMemo(() => {
+    if (typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = 1024;
+    canvas.height = 700;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    return { canvas, texture };
+  }, []);
+
+  useEffect(() => {
+    if (!display) return;
+    const context = display.canvas.getContext("2d");
+    if (!context) return;
+
+    const { canvas } = display;
+    const width = canvas.width;
+    const height = canvas.height;
+    const status = agent?.status === "waiting" ? "waiting" : agent?.taskStatus ?? "idle";
+    const accent = agent?.color ?? "#2676E8";
+    const title = agent?.currentTask && agent.currentTask !== "No active mission assigned"
+      ? agent.currentTask
+      : "No active mission";
+    const activity = agent?.latestActivity || "Waiting for a task assignment.";
+    const result = agent?.latestResult || "";
+
+    context.clearRect(0, 0, width, height);
+    context.fillStyle = "#0B1220";
+    context.fillRect(0, 0, width, height);
+
+    // Desktop title bar and application chrome.
+    context.fillStyle = "#172235";
+    context.fillRect(0, 0, width, 68);
+    context.fillStyle = "#EAF2FC";
+    context.font = "700 23px Inter, Arial, sans-serif";
+    context.fillText(agent?.department?.toUpperCase() ?? "SINC WORKSTATION", 34, 42);
+    context.fillStyle = accent;
+    context.beginPath();
+    context.arc(966, 34, 9, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#9FB0C7";
+    context.font = "600 18px Inter, Arial, sans-serif";
+    context.fillText(agent?.name ?? "Agent", 34, 104);
+
+    // A status indicator tied to the actual task lifecycle.
+    const stateColor = status === "running" ? "#4ADE80"
+      : status === "queued" || status === "waiting" ? "#FBBF24"
+        : status === "failed" ? "#F87171"
+          : status === "completed" ? "#60A5FA"
+            : "#94A3B8";
+    context.fillStyle = "#1A2A3E";
+    context.fillRect(34, 132, 956, 54);
+    context.fillStyle = stateColor;
+    context.beginPath();
+    context.arc(58, 159, 8, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#E8F0FB";
+    context.font = "700 19px Inter, Arial, sans-serif";
+    context.fillText(status.toUpperCase(), 82, 166);
+    context.fillStyle = "#A9B8CC";
+    context.font = "600 17px Inter, Arial, sans-serif";
+    context.textAlign = "right";
+    context.fillText(agent ? `${agent.progress}%` : "—", 966, 166);
+    context.textAlign = "left";
+
+    context.fillStyle = "#8EA2BC";
+    context.font = "700 17px Inter, Arial, sans-serif";
+    context.fillText("CURRENT ASSIGNMENT", 34, 230);
+    context.fillStyle = "#F1F6FD";
+    context.font = "700 25px Inter, Arial, sans-serif";
+    drawCanvasLines(context, title, 34, 270, 920, 34, 2);
+
+    context.fillStyle = "#8EA2BC";
+    context.font = "700 17px Inter, Arial, sans-serif";
+    context.fillText("LATEST RECORDED ACTIVITY", 34, 370);
+    context.fillStyle = "#D6E1EF";
+    context.font = "500 19px Inter, Arial, sans-serif";
+    drawCanvasLines(context, activity, 34, 408, 920, 29, 3);
+
+    if (result) {
+      context.fillStyle = "#8EA2BC";
+      context.font = "700 15px Inter, Arial, sans-serif";
+      context.fillText(status === "completed" ? "LATEST RESULT" : "LATEST OUTPUT", 34, 542);
+      context.fillStyle = "#9EB0C7";
+      context.font = "500 16px Inter, Arial, sans-serif";
+      drawCanvasLines(context, result.replace(/\s+/g, " "), 34, 574, 920, 23, 3);
+    }
+
+    // Progress is rendered only from the backend's persisted task progress.
+    context.fillStyle = "#26364B";
+    context.fillRect(34, 652, 920, 10);
+    context.fillStyle = accent;
+    context.fillRect(34, 652, Math.max(0, Math.min(100, agent?.progress ?? 0)) * 9.2, 10);
+    context.fillStyle = "#8296B0";
+    context.font = "500 13px Inter, Arial, sans-serif";
+    context.fillText("AGENTSINC LOCAL RUNTIME · LIVE TASK DATA", 34, 686);
+    if (agent?.latestTaskUpdatedAt) {
+      context.textAlign = "right";
+      context.fillText(new Date(agent.latestTaskUpdatedAt).toLocaleString(), 966, 686);
+      context.textAlign = "left";
+    }
+    display.texture.needsUpdate = true;
+  }, [
+    display,
+    agent?.name,
+    agent?.department,
+    agent?.color,
+    agent?.status,
+    agent?.taskStatus,
+    agent?.currentTask,
+    agent?.latestActivity,
+    agent?.latestResult,
+    agent?.progress,
+    agent?.latestTaskUpdatedAt,
+  ]);
+
+  useEffect(() => () => display?.texture.dispose(), [display]);
+
+  if (!display) {
+    return (
+      <mesh position={[0, 1.32, -0.6]}>
+        <planeGeometry args={[0.98, 0.68]} />
+        <meshBasicMaterial color="#0B1220" />
+      </mesh>
+    );
+  }
+  return (
+    <mesh position={[0, 1.32, -0.598]}>
+      <planeGeometry args={[0.98, 0.68]} />
+      <meshBasicMaterial map={display.texture} toneMapped={false} />
+    </mesh>
+  );
+}
+
+function drawCanvasLines(
+  context: CanvasRenderingContext2D,
+  value: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines: number,
+) {
+  const words = String(value || "").split(/\s+/);
+  let line = "";
+  let lineNumber = 0;
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (context.measureText(candidate).width > maxWidth && line) {
+      context.fillText(line, x, y + lineNumber * lineHeight);
+      line = word;
+      lineNumber += 1;
+      if (lineNumber >= maxLines) return;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line && lineNumber < maxLines) {
+    context.fillText(line, x, y + lineNumber * lineHeight);
+  }
 }

@@ -10,7 +10,14 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from .db import add_event, agent_to_dict, connect, create_task, create_orchestration, event_to_dict, get_orchestration_detail, init_db, orchestration_to_dict, set_runtime_value, task_to_dict, utc_now
+from .db import (
+    add_event, agent_to_dict, connect, create_task, create_orchestration,
+    event_to_dict, get_orchestration_detail, init_db, orchestration_to_dict,
+    set_runtime_value, task_to_dict, utc_now,
+    claim_tool_approval, get_tool_approval, list_tool_approvals, resolve_tool_approval,
+)
+from .agent_write import write_agent_file
+from .mcp_registry import MCPRegistry, MCPRegistryError, configured_mcp_server_count
 from .research import google_search_is_enabled
 from .workspace import WorkspaceError, list_workspace_files, read_workspace_file, search_workspace, workspace_summary
 
@@ -40,6 +47,10 @@ class SelectModelRequest(BaseModel):
 
 class SetAgentLocationRequest(BaseModel):
     location: Literal["desk", "command", "discussion", "meeting"]
+
+
+class ResolveApprovalRequest(BaseModel):
+    action: Literal["approve", "reject"]
 
 
 def create_app() -> FastAPI:
@@ -89,6 +100,14 @@ def create_app() -> FastAPI:
                 WHERE t.status IN ('queued', 'running')
                 ORDER BY CASE t.status WHEN 'running' THEN 0 ELSE 1 END, t.created_at"""
             ).fetchall()
+            orchestration_agent_ids = set()
+            if active_orchestration:
+                orchestration_agent_ids = {
+                    row["agent_id"] for row in connection.execute(
+                        "SELECT DISTINCT agent_id FROM tasks WHERE orchestration_id=?",
+                        (active_orchestration["id"],),
+                    ).fetchall()
+                }
 
         task_map = {row["id"]: task_to_dict(row) for row in current_tasks}
         latest_activity_by_agent: dict[str, str] = {}
@@ -101,6 +120,9 @@ def create_app() -> FastAPI:
             item = agent_to_dict(row)
             if row["id"] == "team_lead" and active_orchestration:
                 item["currentTask"] = active_orchestration["title"]
+                item["taskStatus"] = "running"
+                item["latestResult"] = active_orchestration["result"]
+                item["latestTaskUpdatedAt"] = active_orchestration["updated_at"]
                 item["progress"] = round(active_orchestration_progress or 0)
                 item["status"] = "paused" if item["paused"] else (
                     "thinking" if active_orchestration["stage"] in ("planning", "synthesizing")
@@ -120,11 +142,22 @@ def create_app() -> FastAPI:
                 agents.append(item)
                 continue
             current = task_map.get(row["current_task_id"])
+            latest_task_row = next(
+                (task for task in task_rows if task["agent_id"] == row["id"]),
+                None,
+            )
+            latest_task = task_to_dict(latest_task_row) if latest_task_row else None
+            displayed_task = current or latest_task
+            if displayed_task:
+                item["currentTask"] = displayed_task["title"]
+                item["taskStatus"] = displayed_task["status"]
+                item["latestResult"] = displayed_task.get("result") or displayed_task.get("error")
+                item["latestTaskUpdatedAt"] = displayed_task["updated_at"]
+                item["progress"] = displayed_task["progress"]
             if current:
-                item["currentTask"] = current["title"]
-                item["progress"] = current["progress"]
                 item["status"] = (
-                    "working" if current["status"] == "running"
+                    "waiting" if row["status"] == "waiting"
+                    else "working" if current["status"] == "running"
                     else ("paused" if item["paused"] else "queued")
                 )
             elif item["paused"]:
@@ -134,7 +167,19 @@ def create_app() -> FastAPI:
                 item["status"] = "paused" if item["paused"] else (
                     "queued" if queued else ("failed" if row["status"] == "failed" else "idle")
                 )
-            item["location"] = row["location"]
+            # Specialists assigned under one active Team Lead orchestration physically
+            # gather in the discussion room while child missions run, then in the
+            # conference room while the Team Lead synthesizes their real outputs.
+            # Once synthesis ends, the persisted home destination is restored.
+            if active_orchestration and row["id"] in orchestration_agent_ids:
+                if active_orchestration["stage"] == "executing":
+                    item["location"] = "discussion"
+                elif active_orchestration["stage"] == "synthesizing":
+                    item["location"] = "meeting"
+                else:
+                    item["location"] = row["location"]
+            else:
+                item["location"] = row["location"]
             item["latestActivity"] = latest_activity_by_agent.get(
                 row["id"], "Waiting for a mission assignment."
             )
@@ -205,8 +250,101 @@ def create_app() -> FastAPI:
                 "last_generation_metrics": last_generation_metrics,
                 "memory_records": memory_records,
                 "google_search_enabled": google_search_is_enabled(),
+                "agent_harness_enabled": os.getenv("AGENTSINC_AGENT_HARNESS_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"},
+                "sandbox_available": bool(os.getenv("AGENTSINC_SANDBOX_IMAGE", "").strip()) and __import__("shutil").which("docker") is not None,
+                "mcp_configured_servers": configured_mcp_server_count(),
+                "pending_approvals": len(list_tool_approvals("pending", 200)),
             },
         }
+
+    @app.get("/api/v1/approvals")
+    def read_tool_approvals(
+        status: Literal["pending", "approved", "rejected", "failed", "all"] = Query(default="pending"),
+        limit: int = Query(default=100, ge=1, le=200),
+    ) -> dict:
+        return {"approvals": list_tool_approvals(status, limit)}
+
+    @app.post("/api/v1/approvals/{approval_id}/resolve")
+    async def decide_tool_approval(approval_id: str, payload: ResolveApprovalRequest) -> dict:
+        approval = get_tool_approval(approval_id)
+        if not approval:
+            raise HTTPException(status_code=404, detail="Tool approval request not found.")
+        if approval["status"] != "pending":
+            raise HTTPException(status_code=409, detail="This tool approval was already resolved.")
+
+        if payload.action == "reject":
+            try:
+                resolved = resolve_tool_approval(
+                    approval_id, "rejected", "Founder rejected this action. No change was made."
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            return {"approval": resolved}
+
+        # Claim the approval atomically before the first side effect.
+        # This also verifies the task is still running and wasn't cancelled.
+        claimed = claim_tool_approval(approval_id)
+        if not claimed:
+            latest = get_tool_approval(approval_id)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    latest.get("result") if latest and latest.get("result")
+                    else "This approval is no longer pending or its mission has stopped."
+                ),
+            )
+
+        tool_name = claimed["tool_name"]
+        arguments = claimed["payload"] or {}
+        try:
+            if tool_name == "workspace.write_file":
+                result = write_agent_file(
+                    str(arguments.get("path") or ""),
+                    str(arguments.get("content") or ""),
+                )
+                result_text = json.dumps({
+                    "status": result["status"],
+                    "path": result["path"],
+                    "bytes_written": result["bytes_written"],
+                    "sha256": result["sha256"],
+                    "summary": str(arguments.get("summary") or "")[:500],
+                })
+            elif tool_name.startswith("mcp."):
+                parts = tool_name.split(".", 2)
+                if len(parts) != 3:
+                    raise MCPRegistryError("Invalid MCP tool identifier.")
+                registry = MCPRegistry()
+                result = await registry.call_tool(
+                    approval["agent_id"],
+                    str(arguments.get("server_name") or parts[1]),
+                    str(arguments.get("tool_name") or parts[2]),
+                    arguments.get("arguments") if isinstance(arguments.get("arguments"), dict) else {},
+                )
+                result_text = json.dumps(result, ensure_ascii=False)[:12000]
+            else:
+                raise HTTPException(status_code=422, detail="This tool type cannot be approved by this endpoint.")
+        except HTTPException:
+            raise
+        except (WorkspaceError, MCPRegistryError, ValueError, OSError) as exc:
+            try:
+                failed = resolve_tool_approval(approval_id, "failed", f"Approved action failed: {exc}")
+            except ValueError:
+                failed = get_tool_approval(approval_id)
+            return {"approval": failed, "error": str(exc)}
+        except Exception as exc:
+            try:
+                failed = resolve_tool_approval(
+                    approval_id, "failed", f"Approved action failed ({type(exc).__name__})."
+                )
+            except ValueError:
+                failed = get_tool_approval(approval_id)
+            return {"approval": failed, "error": f"Approved action failed ({type(exc).__name__})."}
+
+        try:
+            resolved = resolve_tool_approval(approval_id, "approved", result_text)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"approval": resolved}
 
     @app.post("/api/v1/orchestrations", status_code=201)
     def submit_orchestration(payload: CreateOrchestrationRequest) -> dict:

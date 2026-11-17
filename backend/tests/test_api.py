@@ -286,3 +286,86 @@ def test_team_lead_cannot_be_manually_moved_during_active_orchestration() -> Non
         json={"location": "desk"},
     )
     assert response.status_code == 409
+
+
+
+def test_orchestrated_specialists_move_to_discussion_then_meeting_then_return_home() -> None:
+    # Earlier API tests may have left an orchestration active in the shared test DB.
+    # Make this lifecycle test independent of their order.
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='completed', stage='completed' WHERE status='running'"
+        )
+        connection.execute(
+            "UPDATE agents SET location='desk' WHERE id IN ('developer','designer','researcher','tester')"
+        )
+        connection.commit()
+
+    created = client.post(
+        "/api/v1/orchestrations",
+        json={
+            "title": "Coordinate a specialist review",
+            "instructions": "Have research, design, development and QA review the current system and share evidence.",
+        },
+    )
+    orchestration_id = created.json()["orchestration"]["id"]
+    with connect() as connection:
+        now = "2026-11-17T00:00:00+00:00"
+        for agent_id in ("developer", "designer", "researcher", "tester"):
+            connection.execute(
+                """INSERT INTO tasks
+                (id, agent_id, title, instructions, status, progress, created_at, updated_at, orchestration_id)
+                VALUES (?, ?, ?, ?, 'queued', 0, ?, ?, ?)""",
+                (
+                    f"task-{agent_id}", agent_id, f"{agent_id} review",
+                    "Review the real project and return evidence-backed findings.",
+                    now, now, orchestration_id,
+                ),
+            )
+        connection.execute(
+            "UPDATE orchestrations SET status='running', stage='executing' WHERE id=?",
+            (orchestration_id,),
+        )
+        connection.commit()
+
+    executing = client.get("/api/v1/overview").json()
+    locations = {
+        item["id"]: item["location"]
+        for item in executing["agents"]
+        if item["id"] in {"developer", "designer", "researcher", "tester"}
+    }
+    assert set(locations.values()) == {"discussion"}
+
+    with connect() as connection:
+        connection.execute(
+            "UPDATE tasks SET status='completed', progress=100, result='Verified specialist report.' WHERE orchestration_id=?",
+            (orchestration_id,),
+        )
+        connection.execute(
+            "UPDATE orchestrations SET stage='synthesizing' WHERE id=?",
+            (orchestration_id,),
+        )
+        connection.commit()
+
+    synthesizing = client.get("/api/v1/overview").json()
+    locations = {
+        item["id"]: item["location"]
+        for item in synthesizing["agents"]
+        if item["id"] in {"developer", "designer", "researcher", "tester"}
+    }
+    assert set(locations.values()) == {"meeting"}
+
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='completed', stage='completed' WHERE id=?",
+            (orchestration_id,),
+        )
+        connection.commit()
+
+    completed = client.get("/api/v1/overview").json()
+    locations = {
+        item["id"]: item["location"]
+        for item in completed["agents"]
+        if item["id"] in {"developer", "designer", "researcher", "tester"}
+    }
+    assert set(locations.values()) == {"desk"}
