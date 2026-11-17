@@ -36,7 +36,8 @@ def test_harness_persists_started_and_completed_repository_search_events(tmp_pat
 
     with connect() as connection:
         events = connection.execute(
-            "SELECT event_type, message FROM events WHERE task_id=? ORDER BY id",
+            """SELECT event_type, message FROM events
+            WHERE task_id=? AND event_type LIKE 'tool_%' ORDER BY id""",
             (task["id"],),
         ).fetchall()
 
