@@ -4,7 +4,7 @@ import { Html, OrbitControls } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { STATUS_LABELS, type OfficeAgent } from "../types";
+import type { OfficeAgent } from "../types";
 
 type Palette = {
   label: string;
@@ -1071,7 +1071,6 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
 
     const { canvas } = display;
     const width = canvas.width;
-    const height = canvas.height;
     const status = agent?.taskStatus ?? "idle";
     const accent = agent?.color ?? "#2676E8";
     const title = agent?.currentTask && agent.currentTask !== "No active mission assigned"
@@ -1150,6 +1149,11 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
     context.fillStyle = "#8296B0";
     context.font = "500 13px Inter, Arial, sans-serif";
     context.fillText("AGENTSINC LOCAL RUNTIME · LIVE TASK DATA", 34, 686);
+    if (agent?.latestTaskUpdatedAt) {
+      context.textAlign = "right";
+      context.fillText(new Date(agent.latestTaskUpdatedAt).toLocaleString(), 966, 686);
+      context.textAlign = "left";
+    }
     display.texture.needsUpdate = true;
   }, [
     display,
@@ -1162,6 +1166,7 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
     agent?.latestActivity,
     agent?.latestResult,
     agent?.progress,
+    agent?.latestTaskUpdatedAt,
   ]);
 
   useEffect(() => () => display?.texture.dispose(), [display]);
@@ -1191,7 +1196,7 @@ function drawCanvasLines(
   lineHeight: number,
   maxLines: number,
 ) {
-  const words = String(value || "").split(/\\s+/);
+  const words = String(value || "").split(/\s+/);
   let line = "";
   let lineNumber = 0;
   for (const word of words) {
