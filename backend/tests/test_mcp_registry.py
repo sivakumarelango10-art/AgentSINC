@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from app.mcp_registry import MCPRegistryError, load_mcp_config
+from app.mcp_registry import MCPRegistry, MCPRegistryError, allowed_tools_for_role, load_mcp_config
 
 
 def test_mcp_registry_requires_explicit_role_and_tool_allowlists(monkeypatch) -> None:
@@ -61,3 +61,71 @@ def test_mcp_registry_expands_only_named_environment_variables(monkeypatch) -> N
         }]),
     )
     assert load_mcp_config()[0]["env"]["TOKEN"] == "not-a-real-token"
+
+
+
+def test_mcp_registry_limits_github_write_tools_to_developer_role(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "AGENTSINC_MCP_SERVERS_JSON",
+        json.dumps([{
+            "name": "github",
+            "transport": "stdio",
+            "command": "docker",
+            "args": ["run", "-i", "--rm", "ghcr.io/github/github-mcp-server"],
+            "env": {},
+            "roles": ["developer", "tester"],
+            "allow_tools": ["get_file_contents", "create_branch", "push_files", "create_pull_request"],
+            "read_only_tools": ["get_file_contents"],
+            "role_allow_tools": {
+                "developer": ["get_file_contents", "create_branch", "push_files", "create_pull_request"],
+                "tester": ["get_file_contents"],
+            },
+        }]),
+    )
+    config = load_mcp_config()[0]
+    assert allowed_tools_for_role(config, "developer") == [
+        "get_file_contents", "create_branch", "push_files", "create_pull_request"
+    ]
+    assert allowed_tools_for_role(config, "tester") == ["get_file_contents"]
+
+
+def test_mcp_registry_rejects_role_allowlist_for_unassigned_or_unknown_tool(monkeypatch) -> None:
+    invalid_role = {
+        "name": "github", "transport": "stdio", "command": "docker", "args": [],
+        "roles": ["developer"], "allow_tools": ["get_file_contents"],
+        "role_allow_tools": {"tester": ["get_file_contents"]},
+    }
+    monkeypatch.setenv("AGENTSINC_MCP_SERVERS_JSON", json.dumps([invalid_role]))
+    with pytest.raises(MCPRegistryError, match="unassigned"):
+        load_mcp_config()
+
+    invalid_tool = {
+        "name": "github", "transport": "stdio", "command": "docker", "args": [],
+        "roles": ["developer"], "allow_tools": ["get_file_contents"],
+        "role_allow_tools": {"developer": ["push_files"]},
+    }
+    monkeypatch.setenv("AGENTSINC_MCP_SERVERS_JSON", json.dumps([invalid_tool]))
+    with pytest.raises(MCPRegistryError, match="subset of allow_tools"):
+        load_mcp_config()
+
+
+def test_stdio_mcp_server_inherits_parent_path_and_explicit_secrets(monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "C:\\Tools\\Docker;C:\\Windows\\System32")
+    monkeypatch.setenv("MCP_PARENT_TEST", "inherited-value")
+    monkeypatch.setenv(
+        "AGENTSINC_MCP_SERVERS_JSON",
+        json.dumps([{
+            "name": "github",
+            "transport": "stdio",
+            "command": "docker",
+            "args": ["run", "-i", "--rm", "ghcr.io/github/github-mcp-server"],
+            "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "${MCP_PARENT_TEST}"},
+            "roles": ["developer"],
+            "allow_tools": ["get_file_contents"],
+        }]),
+    )
+    config = load_mcp_config()[0]
+    target = MCPRegistry()._target(config)
+    assert target.env["PATH"] == "C:\\Tools\\Docker;C:\\Windows\\System32"
+    assert "MCP_PARENT_TEST" not in target.env
+    assert target.env["GITHUB_PERSONAL_ACCESS_TOKEN"] == "inherited-value"

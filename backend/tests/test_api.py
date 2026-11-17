@@ -396,3 +396,56 @@ def test_overview_exposes_recent_real_tool_trace_for_each_agent() -> None:
     assert len(researcher["recentToolEvents"]) >= 2
     assert researcher["recentToolEvents"][0]["event_type"] == "tool_completed"
     assert "https://example.org/research" in researcher["recentToolEvents"][0]["message"]
+
+
+
+def test_mcp_integrations_endpoint_reports_unconfigured_registry(monkeypatch) -> None:
+    monkeypatch.setenv("AGENTSINC_MCP_SERVERS_JSON", "[]")
+    response = client.get("/api/v1/integrations/mcp")
+    assert response.status_code == 200
+    assert response.json()["configured_count"] == 0
+    assert response.json()["servers"] == []
+
+
+def test_mcp_integrations_endpoint_exposes_role_scoped_tools_without_secrets(monkeypatch) -> None:
+    import json
+    from app.mcp_registry import MCPRegistry
+
+    monkeypatch.setenv(
+        "AGENTSINC_MCP_SERVERS_JSON",
+        json.dumps([{
+            "name": "github",
+            "transport": "stdio",
+            "command": "docker",
+            "args": ["run", "-i", "--rm", "ghcr.io/github/github-mcp-server"],
+            "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "not-a-real-secret"},
+            "roles": ["developer", "tester"],
+            "allow_tools": ["get_file_contents", "push_files"],
+            "read_only_tools": ["get_file_contents"],
+            "role_allow_tools": {
+                "developer": ["get_file_contents", "push_files"],
+                "tester": ["get_file_contents"],
+            },
+        }]),
+    )
+
+    async def fake_discover(self, role: str):
+        tools = ["get_file_contents", "push_files"] if role == "developer" else ["get_file_contents"]
+        return [{
+            "name": f"mcp.github.{tool}",
+            "tool_name": tool,
+            "description": "",
+            "server_name": "github",
+            "input_schema": {"type": "object"},
+            "read_only": tool == "get_file_contents",
+        } for tool in tools]
+
+    monkeypatch.setattr(MCPRegistry, "discover", fake_discover)
+    response = client.get("/api/v1/integrations/mcp")
+    assert response.status_code == 200
+    github = response.json()["servers"][0]
+    assert github["name"] == "github"
+    assert github["agents"]["developer"]["connected"] is True
+    assert "push_files" in github["agents"]["developer"]["tools"]
+    assert github["agents"]["tester"]["tools"] == ["get_file_contents"]
+    assert "not-a-real-secret" not in response.text

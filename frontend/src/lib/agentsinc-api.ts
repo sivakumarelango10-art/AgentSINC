@@ -223,3 +223,28 @@ export function resolveApproval(
     body: JSON.stringify({ action }),
   });
 }
+
+
+
+export type MCPRoleIntegrationStatus = {
+  connected: boolean;
+  tools: string[];
+  error: string | null;
+};
+
+export type MCPIntegrationServer = {
+  name: string;
+  transport: "stdio" | "http";
+  roles: string[];
+  agents: Partial<Record<"developer" | "tester", MCPRoleIntegrationStatus>>;
+};
+
+export type MCPIntegrationStatus = {
+  configured_count: number;
+  servers: MCPIntegrationServer[];
+  error: string | null;
+};
+
+export function getMcpIntegrationStatus(): Promise<MCPIntegrationStatus> {
+  return request("/api/v1/integrations/mcp");
+}

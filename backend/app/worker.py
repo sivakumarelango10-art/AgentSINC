@@ -308,7 +308,7 @@ def _claim_next_task() -> dict[str, Any] | None:
             a.is_paused AS agent_paused, a.model_profile AS agent_model_profile
             FROM tasks t JOIN agents a ON a.id=t.agent_id
             WHERE t.status='queued' AND a.is_paused=0
-            ORDER BY t.created_at ASC LIMIT 1"""
+            ORDER BY t.created_at ASC, t.rowid ASC LIMIT 1"""
         ).fetchone()
         if not row:
             connection.commit()

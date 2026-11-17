@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
 import {
   BRAND_THEMES,
   INITIAL_AGENTS,
@@ -18,6 +18,7 @@ import {
   createOrchestration,
   getOverview,
   getWorkspaceSummary,
+  getMcpIntegrationStatus,
   moveAgent,
   getApprovals,
   resolveApproval,
@@ -29,6 +30,7 @@ import {
   type AgentApproval,
   type RuntimeStatus,
   type WorkspaceSummary,
+  type MCPIntegrationStatus,
 } from "@/lib/agentsinc-api";
 
 const OfficeViewport = dynamic(() => import("./OfficeViewport"), {
@@ -984,6 +986,22 @@ function SettingsPanel({
   const [workspace, setWorkspace] = useState<WorkspaceSummary | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [workspaceError, setWorkspaceError] = useState("");
+  const [mcpStatus, setMcpStatus] = useState<MCPIntegrationStatus | null>(null);
+  const [mcpLoading, setMcpLoading] = useState(true);
+  const [mcpError, setMcpError] = useState("");
+
+  const refreshMcpStatus = useCallback(async () => {
+    setMcpLoading(true);
+    try {
+      const status = await getMcpIntegrationStatus();
+      setMcpStatus(status);
+      setMcpError(status.error ?? "");
+    } catch (error) {
+      setMcpError(error instanceof Error ? error.message : "MCP integration status is unavailable.");
+    } finally {
+      setMcpLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -1004,6 +1022,10 @@ function SettingsPanel({
       });
     return () => { disposed = true; };
   }, []);
+
+  useEffect(() => {
+    void refreshMcpStatus();
+  }, [refreshMcpStatus]);
 
   return (
     <div className="panel-content settings-list">
@@ -1033,6 +1055,49 @@ function SettingsPanel({
         <small>Local-only mode · no paid model API</small>
       </div>
 
+      <div className="runtime-health-card">
+        <div className="runtime-health-head">
+          <strong>GITHUB DEVELOPMENT PIPELINE</strong>
+          <span className={mcpStatus?.servers.some((server) => server.agents.developer?.connected) ? "health-chip ready" : "health-chip"}>
+            {mcpLoading ? "CHECKING" : mcpStatus?.servers.some((server) => server.agents.developer?.connected) ? "DEVELOPER CONNECTED" : mcpStatus?.configured_count ? "UNAVAILABLE" : "NOT CONFIGURED"}
+          </span>
+        </div>
+        {mcpLoading ? <small>Discovering tools on configured MCP servers…</small> : null}
+        {mcpStatus?.servers.map((server) => (
+          <div className="mcp-server-status" key={server.name}>
+            <div className="health-row">
+              <i className={server.agents.developer?.connected ? "health-dot online" : "health-dot"} />
+              <span>{server.name}</span>
+              <small>{server.transport.toUpperCase()}</small>
+            </div>
+            {server.agents.developer ? (
+              <div className="mcp-role-status">
+                <strong>Developer</strong>
+                <span className={server.agents.developer.connected ? "mcp-role-chip ready" : "mcp-role-chip"}>
+                  {server.agents.developer.connected ? "CONNECTED" : "UNAVAILABLE"}
+                </span>
+                <small>{server.agents.developer.tools.length ? server.agents.developer.tools.join(" · ") : server.agents.developer.error ?? "No allowlisted tools discovered."}</small>
+              </div>
+            ) : null}
+            {server.agents.tester ? (
+              <div className="mcp-role-status">
+                <strong>QA · read-only</strong>
+                <span className={server.agents.tester.connected ? "mcp-role-chip ready" : "mcp-role-chip"}>
+                  {server.agents.tester.connected ? "CONNECTED" : "UNAVAILABLE"}
+                </span>
+                <small>{server.agents.tester.tools.length ? server.agents.tester.tools.join(" · ") : server.agents.tester.error ?? "No read-only tools discovered."}</small>
+              </div>
+            ) : null}
+          </div>
+        ))}
+        {!mcpLoading && !mcpStatus?.configured_count ? (
+          <p className="runtime-feature-copy">No MCP servers are configured. Add the official GitHub MCP server to backend/.env to enable repository branch, file-push and pull-request tools.</p>
+        ) : null}
+        {mcpError ? <small className="mcp-status-error">{mcpError}</small> : null}
+        <small>Credentials are never displayed here. Only Developer receives GitHub write tools; QA is read-only. Every remote mutation requires founder approval, and agents cannot merge pull requests.</small>
+        <small>Setup guide: docs/GITHUB_DEVELOPMENT_WORKFLOW.md</small>
+        <button className="runtime-action full" type="button" onClick={() => void refreshMcpStatus()} disabled={mcpLoading}>Refresh GitHub connection</button>
+      </div>
       {runtime.last_generation_metrics ? (
         <div className="runtime-health-card">
           <div className="runtime-health-head">
@@ -1090,10 +1155,10 @@ function SettingsPanel({
         <small>No cloud inference calls, PostgreSQL plan or Redis subscription in this local MVP. Your PC must stay awake and powered for continuous work.</small>
       </div>
 
-      <button className="runtime-action full" onClick={onRefresh} disabled={busyAction.length > 0}>Refresh runtime status</button>
+      <button className="runtime-action full" onClick={() => { onRefresh(); void refreshMcpStatus(); }} disabled={busyAction.length > 0}>Refresh runtime and integrations</button>
       {runtimeError ? <div className="runtime-notice">{runtimeError}</div> : null}
       {notice ? <div className="runtime-notice">{notice}</div> : null}
-      <div className="panel-note">Code execution, file edits, browser automation and external actions are disabled until the isolated sandbox and approval controls are built.</div>
+      <div className="panel-note">Agent Harness permissions: approved local source writes, fixed Docker-isolated test suites, and explicitly allowlisted MCP tools. Unrestricted shell access and agent pull-request merging remain disabled.</div>
     </div>
   );
 }
