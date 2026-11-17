@@ -117,3 +117,22 @@ def test_frontend_build_invokes_next_cli_through_node() -> None:
     assert command.startswith("node ./node_modules/next/dist/bin/next ")
     assert command.endswith(" build")
     assert command != "npm run build"
+
+
+
+def test_sandbox_tmpfs_is_executable_for_native_node_addons() -> None:
+    from app.sandbox import SANDBOX_TMPFS
+
+    assert SANDBOX_TMPFS == "/tmp:rw,exec,nosuid,nodev,size=3g"
+    assert ",noexec," not in SANDBOX_TMPFS
+
+
+def test_sandbox_bootstrap_uses_writable_home_and_next_cache() -> None:
+    from app.sandbox import TEST_SUITES, _build_workspace_bootstrap
+
+    working_directory, command = TEST_SUITES["frontend-build"]
+    bootstrap = _build_workspace_bootstrap(working_directory, command)
+
+    assert "mkdir -p /tmp/agentsinc-home/.cache/next-swc" in bootstrap
+    assert "export HOME=/tmp/agentsinc-home" in bootstrap
+    assert "export NEXT_TELEMETRY_DISABLED=1" in bootstrap

@@ -9,6 +9,9 @@ from typing import Any
 from .workspace import workspace_root
 
 
+SANDBOX_TMPFS = "/tmp:rw,exec,nosuid,nodev,size=3g"
+
+
 TEST_SUITES: dict[str, tuple[str, str]] = {
     "python-tests": (
         "backend",
@@ -98,7 +101,9 @@ def _build_workspace_bootstrap(working_directory: str, command: str) -> str:
     """
     bootstrap = (
         "set -eu; "
-        "mkdir -p /tmp/agentsinc-workspace; "
+        "mkdir -p /tmp/agentsinc-home/.cache/next-swc /tmp/agentsinc-workspace; "
+        "export HOME=/tmp/agentsinc-home; "
+        "export NEXT_TELEMETRY_DISABLED=1; "
         "tar -C /source "
         "--exclude=.git --exclude=.venv --exclude=__pycache__ "
         "--exclude=frontend/node_modules --exclude=frontend/.next "
@@ -145,7 +150,7 @@ def run_test_suite(suite: str) -> dict[str, Any]:
         "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges",
         "--read-only",
-        "--tmpfs", "/tmp:rw,nosuid,nodev,size=3g",
+        "--tmpfs", SANDBOX_TMPFS,
         "-e", "PYTHONDONTWRITEBYTECODE=1",
         "-e", "PYTEST_ADDOPTS=-p no:cacheprovider",
         "-v", f"{source.as_posix()}:/source:ro",
