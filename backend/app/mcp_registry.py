@@ -44,6 +44,12 @@ def _expand_env_value(value: str) -> str:
     return resolved
 
 
+def allowed_tools_for_role(config: dict[str, Any], role: str) -> list[str]:
+    """Return the effective MCP tool allowlist for one role."""
+    role_map = config.get("role_allow_tools") or {}
+    return list(role_map.get(role, config["allow_tools"]))
+
+
 def _validate_server(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise MCPRegistryError("Every MCP server entry must be an object.")
@@ -56,6 +62,7 @@ def _validate_server(value: Any) -> dict[str, Any]:
     roles = value.get("roles", [])
     allow_tools = value.get("allow_tools", [])
     read_only_tools = value.get("read_only_tools", [])
+    role_allow_tools = value.get("role_allow_tools", {})
     if not isinstance(roles, list) or not set(roles).issubset(ROLE_IDS):
         raise MCPRegistryError(f"MCP server {name} contains an invalid agent role.")
     if not isinstance(allow_tools, list) or not allow_tools or len(allow_tools) > 100:
@@ -64,6 +71,17 @@ def _validate_server(value: Any) -> dict[str, Any]:
         raise MCPRegistryError(f"MCP server {name} has an invalid allowed tool name.")
     if not isinstance(read_only_tools, list) or not set(read_only_tools).issubset(set(allow_tools)):
         raise MCPRegistryError(f"MCP server {name} read_only_tools must be a subset of allow_tools.")
+    if not isinstance(role_allow_tools, dict):
+        raise MCPRegistryError(f"MCP server {name} role_allow_tools must be an object.")
+    normalized_role_tools: dict[str, list[str]] = {}
+    for role, role_tools in role_allow_tools.items():
+        if role not in roles or not isinstance(role_tools, list):
+            raise MCPRegistryError(f"MCP server {name} role_allow_tools contains an unassigned or invalid role.")
+        if not all(isinstance(tool, str) and tool for tool in role_tools):
+            raise MCPRegistryError(f"MCP server {name} role_allow_tools contains an invalid tool name.")
+        if not set(role_tools).issubset(set(allow_tools)):
+            raise MCPRegistryError(f"MCP server {name} role_allow_tools must be a subset of allow_tools.")
+        normalized_role_tools[role] = list(dict.fromkeys(role_tools))
 
     result: dict[str, Any] = {
         "name": name,
@@ -71,6 +89,7 @@ def _validate_server(value: Any) -> dict[str, Any]:
         "roles": roles,
         "allow_tools": allow_tools,
         "read_only_tools": read_only_tools,
+        "role_allow_tools": normalized_role_tools,
     }
     if transport == "stdio":
         command = str(value.get("command") or "").strip()
@@ -116,10 +135,12 @@ class MCPRegistry:
         if config["transport"] == "http":
             return config["url"]
         from mcp import StdioServerParameters
+        process_env = os.environ.copy()
+        process_env.update(config["env"])
         return StdioServerParameters(
             command=config["command"],
             args=config["args"],
-            env=config["env"],
+            env=process_env,
         )
 
     async def discover(self, agent_id: str) -> list[dict[str, Any]]:
@@ -135,10 +156,11 @@ class MCPRegistry:
             if agent_id not in config["roles"]:
                 continue
             try:
+                role_allowlist = set(allowed_tools_for_role(config, agent_id))
                 async with Client(self._target(config)) as client:
                     response = await client.list_tools()
                     for item in response.tools:
-                        if item.name not in config["allow_tools"]:
+                        if item.name not in role_allowlist:
                             continue
                         schema = getattr(item, "inputSchema", None) or {"type": "object", "properties": {}}
                         discovered.append({
@@ -165,7 +187,7 @@ class MCPRegistry:
         arguments: dict[str, Any],
     ) -> dict[str, Any]:
         config = next((item for item in self.servers if item["name"] == server_name), None)
-        if not config or agent_id not in config["roles"] or tool_name not in config["allow_tools"]:
+        if not config or agent_id not in config["roles"] or tool_name not in allowed_tools_for_role(config, agent_id):
             raise MCPRegistryError("The requested MCP tool is not allowlisted for this agent.")
         try:
             from mcp import Client

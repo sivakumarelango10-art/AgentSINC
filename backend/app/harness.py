@@ -151,6 +151,78 @@ class AgentHarness:
             )
             connection.commit()
 
+    def _related_tool_events(self) -> list[dict[str, Any]]:
+        orchestration_id = self.task.get("orchestration_id")
+        with connect() as connection:
+            if orchestration_id:
+                rows = connection.execute(
+                    """SELECT e.agent_id, e.event_type, e.message, e.task_id
+                    FROM events e LEFT JOIN tasks t ON t.id=e.task_id
+                    WHERE e.task_id=? OR t.orchestration_id=?
+                    ORDER BY e.id ASC LIMIT 250""",
+                    (self.task["id"], orchestration_id),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """SELECT agent_id, event_type, message, task_id
+                    FROM events WHERE task_id=? ORDER BY id ASC LIMIT 100""",
+                    (self.task["id"],),
+                ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _has_required_qa_pass(self) -> bool:
+        orchestration_id = self.task.get("orchestration_id")
+        for event in self._related_tool_events():
+            if event["event_type"] != "tool_completed" or not str(event["message"]).startswith("tests.run:"):
+                continue
+            if "PASSED; exit=0" not in str(event["message"]):
+                continue
+            if orchestration_id and event["agent_id"] == "tester":
+                return True
+            if not orchestration_id and event["task_id"] == self.task["id"]:
+                return True
+        return False
+
+    def _latest_pushed_branch(self) -> str | None:
+        for event in reversed(self._related_tool_events()):
+            if event["event_type"] != "tool_completed":
+                continue
+            message = str(event["message"])
+            if not re.match(r"mcp\\.[a-z0-9_-]+\\.(?:push_files|create_or_update_file):", message):
+                continue
+            match = re.search(r"""\\bbranch ['"]([^'"]+)['"]""", message, flags=re.IGNORECASE)
+            if match:
+                return match.group(1)
+        return None
+
+    def _github_mutation_policy_error(self, tool_name: str, arguments: dict[str, Any]) -> str | None:
+        if tool_name == "merge_pull_request":
+            return "Pull request merging is disabled for agents. A founder must merge manually."
+        if tool_name in {"push_files", "create_or_update_file"}:
+            if not self._has_required_qa_pass():
+                required = "the QA Agent's successful test run in this orchestration" if self.task.get("orchestration_id") else "a successful test run in this mission"
+                return f"GitHub publishing is blocked until {required} is recorded (PASSED, exit code 0)."
+            branch = str(arguments.get("branch") or "").strip()
+            if not branch:
+                return "GitHub source writes require an explicit feature branch."
+            if branch.casefold() in {"main", "master", "production", "prod", "release"}:
+                return f"Direct writes to protected/default branch '{branch}' are blocked. Use a feature branch."
+            return None
+        if tool_name == "create_pull_request":
+            if not self._has_required_qa_pass():
+                return "Opening a pull request is blocked until the required QA test run passes."
+            pushed_branch = self._latest_pushed_branch()
+            if not pushed_branch:
+                return "Opening a pull request is blocked until a successful GitHub file push is recorded."
+            head = str(arguments.get("head") or "").strip()
+            base = str(arguments.get("base") or "").strip()
+            head_branch = head.rsplit(":", 1)[-1]
+            if not head or not base or head_branch != pushed_branch:
+                return f"The pull request head must match the successfully pushed feature branch '{pushed_branch}'."
+            if head_branch.casefold() == base.casefold():
+                return "The pull request head and base branches must be different."
+        return None
+
     def _tool_result_summary(self, name: str, arguments: dict[str, Any], output: str) -> str:
         clean = redact_secrets(str(output or "")).replace("\r", " ").replace("\n", " ")
         clean = re.sub(r"\s+", " ", clean).strip()
@@ -201,7 +273,32 @@ class AgentHarness:
             return f"Read {path} ({len(output)} characters)."
 
         if name.startswith("mcp."):
-            return f"{name} returned {len(output)} character(s): {clean[:340]}"
+            tool_name = name.rsplit(".", 1)[-1]
+            urls = list(dict.fromkeys(re.findall(r"""https?://[^\s\])>"']+""", clean)))
+            if tool_name == "push_files":
+                files = arguments.get("files") if isinstance(arguments.get("files"), list) else []
+                branch = str(arguments.get("branch") or "unknown")
+                summary = f"Pushed {len(files)} file(s) to branch '{branch}'"
+                sha_match = re.search(r"""["'](?:sha|oid)["']\s*:\s*["']([0-9a-f]{7,40})""", clean, re.IGNORECASE)
+                if sha_match:
+                    summary += f" (commit {sha_match.group(1)[:12]})"
+                if urls:
+                    summary += f": {urls[0]}"
+                return summary + "."
+            if tool_name == "create_or_update_file":
+                branch = str(arguments.get("branch") or "unknown")
+                path = str(arguments.get("path") or "source file")
+                return f"Updated {path} on feature branch '{branch}'" + (f": {urls[0]}" if urls else ".")
+            if tool_name == "create_branch":
+                branch = str(arguments.get("branch") or "requested branch")
+                return f"Created GitHub branch '{branch}'" + (f": {urls[0]}" if urls else ".")
+            if tool_name == "create_pull_request":
+                number = re.search(r"""["']number["']\s*:\s*(\d+)""", clean)
+                if not number and urls:
+                    number = re.search(r"/pull/(\d+)", urls[0])
+                label = f"Created GitHub pull request #{number.group(1)}" if number else "Created GitHub pull request"
+                return label + (f": {urls[0]}" if urls else f" · {clean[:220]}")
+            return f"{name} returned {len(output)} character(s): " + (urls[0] if urls else clean[:300])
 
         return clean[:560] or f"{name} returned an empty result."
 
@@ -226,7 +323,7 @@ class AgentHarness:
             event_type = "tool_awaiting_approval"
         elif any(token in lower for token in (
             "tool execution was rejected", "tool execution failed", "external research request failed",
-            "founder rejected", "approval timed out", "not available to the", "not configured",
+            "approved action failed", "founder rejected", "approval timed out", "not available to the", "not configured",
         )):
             event_type = "tool_failed"
         elif name == "tests.run":
@@ -291,6 +388,10 @@ class AgentHarness:
             if item:
                 if not self.registry:
                     return "The configured MCP registry is unavailable."
+                if not item["read_only"]:
+                    policy_error = self._github_mutation_policy_error(item["tool_name"], arguments)
+                    if policy_error:
+                        return f"Tool execution was rejected: {policy_error}"
                 payload = {
                     "server_name": item["server_name"],
                     "tool_name": item["tool_name"],
