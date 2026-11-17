@@ -38,6 +38,10 @@ class SelectModelRequest(BaseModel):
     model: str = Field(min_length=1, max_length=160)
 
 
+class SetAgentLocationRequest(BaseModel):
+    location: Literal["desk", "command", "discussion", "meeting"]
+
+
 def create_app() -> FastAPI:
     init_db()
     app = FastAPI(
@@ -130,7 +134,7 @@ def create_app() -> FastAPI:
                 item["status"] = "paused" if item["paused"] else (
                     "queued" if queued else ("failed" if row["status"] == "failed" else "idle")
                 )
-            item["location"] = "command" if row["id"] in ("ceo", "team_lead") else "desk"
+            item["location"] = row["location"]
             item["latestActivity"] = latest_activity_by_agent.get(
                 row["id"], "Waiting for a mission assignment."
             )
@@ -412,6 +416,36 @@ def create_app() -> FastAPI:
             add_event(connection, agent_id, agent["current_task_id"], event_type, message)
             connection.commit()
         return {"ok": True, "agent_id": agent_id, "paused": bool(paused), "message": message}
+
+    @app.post("/api/v1/agents/{agent_id}/location")
+    def move_agent(agent_id: str, payload: SetAgentLocationRequest) -> dict:
+        with connect() as connection:
+            agent = connection.execute("SELECT * FROM agents WHERE id=?", (agent_id,)).fetchone()
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent not found.")
+            if agent_id == "team_lead":
+                active = connection.execute(
+                    "SELECT 1 FROM orchestrations WHERE status='running' LIMIT 1"
+                ).fetchone()
+                if active:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="The Team Lead is following an active orchestration route. Move them after it finishes.",
+                    )
+            now = utc_now()
+            connection.execute(
+                "UPDATE agents SET location=?, updated_at=? WHERE id=?",
+                (payload.location, now, agent_id),
+            )
+            add_event(
+                connection,
+                agent_id,
+                agent["current_task_id"],
+                "agent_location_changed",
+                f'{agent["name"]} was sent to the {payload.location.replace("_", " ")}.',
+            )
+            connection.commit()
+        return {"ok": True, "agent_id": agent_id, "location": payload.location}
 
     @app.patch("/api/v1/runtime/model")
     async def select_model(payload: SelectModelRequest) -> dict:

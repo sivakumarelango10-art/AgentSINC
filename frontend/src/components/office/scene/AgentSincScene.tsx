@@ -31,6 +31,12 @@ const roomLayout = [
 ];
 
 const officeLocationTargets: Record<string, Record<string, [number, number, number]>> = {
+  command: {
+    developer: [-1.35, 0, -4.25],
+    designer: [1.35, 0, -4.25],
+    researcher: [-1.35, 0, -5.25],
+    tester: [1.35, 0, -5.25],
+  },
   discussion: {
     ceo: [-1.65, 0, 4.15],
     team_lead: [0, 0, 4.15],
@@ -765,9 +771,11 @@ function AgentAvatar({
   const homePosition: [number, number, number] = [
     agent.position[0], 0, agent.position[2] + 1.1,
   ];
-  const destination = agent.location === "discussion" || agent.location === "meeting"
+  const destination = agent.location && agent.location !== "desk" && agent.location !== "command"
     ? officeLocationTargets[agent.location]?.[agent.id] ?? homePosition
-    : homePosition;
+    : agent.location === "command"
+      ? officeLocationTargets.command?.[agent.id] ?? homePosition
+      : homePosition;
   const bobOffset = useMemo(() => agent.position[0] * 0.13, [agent.position]);
   const skinTone = agent.id === "researcher" ? "#B97852" : agent.id === "designer" ? "#D69B76" : agent.id === "tester" ? "#C58C69" : "#D29A75";
   const hairTone = agent.id === "designer" ? "#302322" : agent.id === "researcher" ? "#241D19" : "#302A28";

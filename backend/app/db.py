@@ -11,12 +11,12 @@ from uuid import uuid4
 
 
 AGENTS: list[dict[str, Any]] = [
-    {"id": "ceo", "name": "SINC CEO", "role": "Founder Interface", "department": "Command Hub", "color": "#7C3AED", "model_profile": "Founder Liaison", "position": [0, 0, -4.5]},
-    {"id": "team_lead", "name": "Team Lead", "role": "Execution Coordinator", "department": "Command Hub", "color": "#0F9D91", "model_profile": "Mission Coordinator", "position": [2.05, 0, -5.15]},
-    {"id": "developer", "name": "Dev Agent", "role": "Developer", "department": "Development Studio", "color": "#0EA5E9", "model_profile": "Code Specialist", "position": [-6.3, 0, -0.9]},
-    {"id": "designer", "name": "Design Agent", "role": "Designer", "department": "Design Studio", "color": "#EC4899", "model_profile": "Visual Specialist", "position": [6.3, 0, -0.9]},
-    {"id": "researcher", "name": "Research Agent", "role": "Researcher", "department": "Research Library", "color": "#D97706", "model_profile": "Research Specialist", "position": [-6.3, 0, 4.25]},
-    {"id": "tester", "name": "QA Agent", "role": "Tester", "department": "Quality Lab", "color": "#16A34A", "model_profile": "Quality Specialist", "position": [6.3, 0, 4.25]},
+    {"id": "ceo", "name": "SINC CEO", "role": "Founder Interface", "department": "Command Hub", "color": "#7C3AED", "model_profile": "Founder Liaison", "position": [0, 0, -4.5], "location": "command"},
+    {"id": "team_lead", "name": "Team Lead", "role": "Execution Coordinator", "department": "Command Hub", "color": "#0F9D91", "model_profile": "Mission Coordinator", "position": [2.05, 0, -5.15], "location": "command"},
+    {"id": "developer", "name": "Dev Agent", "role": "Developer", "department": "Development Studio", "color": "#0EA5E9", "model_profile": "Code Specialist", "position": [-6.3, 0, -0.9], "location": "desk"},
+    {"id": "designer", "name": "Design Agent", "role": "Designer", "department": "Design Studio", "color": "#EC4899", "model_profile": "Visual Specialist", "position": [6.3, 0, -0.9], "location": "desk"},
+    {"id": "researcher", "name": "Research Agent", "role": "Researcher", "department": "Research Library", "color": "#D97706", "model_profile": "Research Specialist", "position": [-6.3, 0, 4.25], "location": "desk"},
+    {"id": "tester", "name": "QA Agent", "role": "Tester", "department": "Quality Lab", "color": "#16A34A", "model_profile": "Quality Specialist", "position": [6.3, 0, 4.25], "location": "desk"},
 ]
 
 
@@ -65,6 +65,7 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'idle',
                 is_paused INTEGER NOT NULL DEFAULT 0,
                 current_task_id TEXT,
+                location TEXT NOT NULL DEFAULT 'desk',
                 updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS tasks (
@@ -125,6 +126,10 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_agent_memory_agent_created ON agent_memory(agent_id, created_at DESC);
             """
         )
+        agent_columns = {row["name"] for row in connection.execute("PRAGMA table_info(agents)").fetchall()}
+        if "location" not in agent_columns:
+            connection.execute("ALTER TABLE agents ADD COLUMN location TEXT NOT NULL DEFAULT 'desk'")
+
         task_columns = {row["name"] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
         if "orchestration_id" not in task_columns:
             connection.execute("ALTER TABLE tasks ADD COLUMN orchestration_id TEXT REFERENCES orchestrations(id)")
@@ -140,10 +145,10 @@ def init_db() -> None:
         for agent in AGENTS:
             connection.execute(
                 """INSERT OR IGNORE INTO agents
-                (id, name, role, department, color, model_profile, position_json, status, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?)""",
+                (id, name, role, department, color, model_profile, position_json, status, location, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'idle', ?, ?)""",
                 (agent["id"], agent["name"], agent["role"], agent["department"], agent["color"],
-                 agent["model_profile"], json.dumps(agent["position"]), now),
+                 agent["model_profile"], json.dumps(agent["position"]), agent.get("location", "desk"), now),
             )
         connection.commit()
 
@@ -186,6 +191,7 @@ def agent_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "id": row["id"], "name": row["name"], "role": row["role"], "department": row["department"],
         "color": row["color"], "model": row["model_profile"], "position": json.loads(row["position_json"]),
         "status": row["status"], "paused": bool(row["is_paused"]), "current_task_id": row["current_task_id"],
+        "location": row["location"] if "location" in row.keys() else "desk",
         "currentTask": "No active mission assigned", "progress": 0, "updated_at": row["updated_at"],
     }
 

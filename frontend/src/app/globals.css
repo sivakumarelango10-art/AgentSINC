@@ -662,3 +662,11 @@ html, body { background: #EEF2F6; color: #1D2939; }
 .scene-monitor-activity { color: #B9CDE0 !important; font-weight: 500 !important; }
 .scene-monitor-progress { height: 5px; }
 .scene-monitor-percent { color: #B9CDE0; font-size: 8px; text-align: right; }
+
+
+.agent-location-control { margin: 12px 0 15px; padding: 11px; border: 1px solid rgba(100,116,139,.16); border-radius: 10px; background: rgba(255,255,255,.76); }
+.agent-location-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.location-action { min-height: 32px; padding: 0 6px; border: 1px solid rgba(100,116,139,.22); border-radius: 7px; color: #43536A; background: #FFFFFF; cursor: pointer; font-size: 9px; font-weight: 700; transition: .16s ease; }
+.location-action:hover:not(:disabled), .location-action.selected { border-color: var(--accent); color: #17324E; background: var(--accent-glow); }
+.location-action:disabled { opacity: .48; cursor: not-allowed; }
+.agent-location-control > small { display: block; margin-top: 8px; color: #77869A; font-size: 8px; line-height: 1.45; }

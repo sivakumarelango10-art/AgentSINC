@@ -18,10 +18,12 @@ import {
   createOrchestration,
   getOverview,
   getWorkspaceSummary,
+  moveAgent,
   retryMission,
   type AgentEvent,
   type AgentOrchestration,
   type AgentTask,
+  type AgentLocation,
   type RuntimeStatus,
   type WorkspaceSummary,
 } from "@/lib/agentsinc-api";
@@ -278,6 +280,20 @@ export function OfficeExperience() {
     }
   };
 
+  const moveSelectedAgent = async (agentId: string, location: AgentLocation) => {
+    setBusyAction(`move-${agentId}`);
+    setNotice("");
+    try {
+      await moveAgent(agentId, location);
+      setNotice(`Agent destination saved: ${location.replace("_", " ")}.`);
+      await refreshOverview();
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not move the agent.");
+    } finally {
+      setBusyAction("");
+    }
+  };
+
   const cancelTask = async (task: AgentTask) => {
     setBusyAction(`cancel-${task.id}`);
     setNotice("");
@@ -485,6 +501,7 @@ export function OfficeExperience() {
               setMissionInstructions={setMissionInstructions}
               onSelect={selectAgent}
               onControl={toggleAgent}
+              onMoveLocation={moveSelectedAgent}
               onAssign={assignMission}
               busyAction={busyAction}
               notice={notice}
@@ -570,6 +587,7 @@ function AgentPanel({
   setMissionInstructions,
   onSelect,
   onControl,
+  onMoveLocation,
   onAssign,
   busyAction,
   notice,
@@ -585,6 +603,7 @@ function AgentPanel({
   setMissionInstructions: (value: string) => void;
   onSelect: (id: string) => void;
   onControl: (agent: OfficeAgent) => void;
+  onMoveLocation: (agentId: string, location: AgentLocation) => void;
   onAssign: (event: FormEvent<HTMLFormElement>) => void;
   busyAction: string;
   notice: string;
@@ -610,6 +629,36 @@ function AgentPanel({
       <div className="agent-detail-grid">
         <div><small>DEPARTMENT</small><strong>{selectedAgent.department}</strong></div>
         <div><small>AGENT TYPE</small><strong>{selectedAgent.model}</strong></div>
+      </div>
+
+      <div className="agent-location-control">
+        <div className="panel-section-label">
+          OFFICE DESTINATION
+          <span>{(selectedAgent.location ?? "desk").replace("_", " ").toUpperCase()}</span>
+        </div>
+        <div className="agent-location-actions">
+          {([
+            ["desk", "Desk"],
+            ["command", "Command"],
+            ["discussion", "Discussion"],
+            ["meeting", "Meeting"],
+          ] as const).map(([location, label]) => (
+            <button
+              key={location}
+              className={selectedAgent.location === location ? "location-action selected" : "location-action"}
+              onClick={() => onMoveLocation(selectedAgent.id, location)}
+              disabled={
+                !runtime.api_connected ||
+                busyAction === `move-${selectedAgent.id}` ||
+                (selectedAgent.id === "team_lead" && selectedAgent.location !== location && selectedAgent.status === "collaborating")
+              }
+              aria-pressed={selectedAgent.location === location}
+            >
+              {busyAction === `move-${selectedAgent.id}` ? "Moving…" : label}
+            </button>
+          ))}
+        </div>
+        <small className="form-hint">Destinations are saved by the local API. The avatar walks to its assigned room; active Team Lead routes are controlled by the orchestration lifecycle.</small>
       </div>
 
       <div className="agent-current-mission">

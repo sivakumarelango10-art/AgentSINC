@@ -178,3 +178,17 @@ export function chooseLocalModel(model: string): Promise<{ ok: boolean; selected
     body: JSON.stringify({ model }),
   });
 }
+
+
+export type AgentLocation = "desk" | "command" | "discussion" | "meeting";
+
+export function moveAgent(agentId: string, location: AgentLocation): Promise<{
+  ok: boolean;
+  agent_id: string;
+  location: AgentLocation;
+}> {
+  return request(`/api/v1/agents/${encodeURIComponent(agentId)}/location`, {
+    method: "POST",
+    body: JSON.stringify({ location }),
+  });
+}

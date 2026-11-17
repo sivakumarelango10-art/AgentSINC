@@ -241,3 +241,48 @@ def test_overview_exposes_backend_driven_team_lead_room_and_latest_activity() ->
     next_overview = client.get("/api/v1/overview").json()
     lead = next(item for item in next_overview["agents"] if item["id"] == "team_lead")
     assert lead["location"] == "meeting"
+
+
+
+def test_agent_location_is_persisted_and_recorded_in_timeline() -> None:
+    moved = client.post(
+        "/api/v1/agents/developer/location",
+        json={"location": "meeting"},
+    )
+    assert moved.status_code == 200
+    assert moved.json()["location"] == "meeting"
+
+    overview = client.get("/api/v1/overview")
+    assert overview.status_code == 200
+    developer = next(item for item in overview.json()["agents"] if item["id"] == "developer")
+    assert developer["location"] == "meeting"
+    assert "sent to the meeting" in developer["latestActivity"]
+
+    invalid = client.post(
+        "/api/v1/agents/developer/location",
+        json={"location": "server-room"},
+    )
+    assert invalid.status_code == 422
+
+
+def test_team_lead_cannot_be_manually_moved_during_active_orchestration() -> None:
+    created = client.post(
+        "/api/v1/orchestrations",
+        json={
+            "title": "Active handoff",
+            "instructions": "Coordinate a short specialist handoff and consolidate the outcome.",
+        },
+    )
+    orchestration_id = created.json()["orchestration"]["id"]
+    with connect() as connection:
+        connection.execute(
+            "UPDATE orchestrations SET status='running', stage='executing' WHERE id=?",
+            (orchestration_id,),
+        )
+        connection.commit()
+
+    response = client.post(
+        "/api/v1/agents/team_lead/location",
+        json={"location": "desk"},
+    )
+    assert response.status_code == 409
