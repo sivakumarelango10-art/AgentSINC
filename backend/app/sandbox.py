@@ -88,6 +88,32 @@ def get_sandbox_status() -> dict[str, Any]:
     return status
 
 
+def _build_workspace_bootstrap(working_directory: str, command: str) -> str:
+    """Copy source into tmpfs and keep frontend dependencies inside the Turbopack root.
+
+    Turbopack refuses to resolve the Next.js package through a node_modules symlink
+    whose target lives outside the detected workspace root. A real copy into the
+    disposable tmpfs workspace keeps dependency resolution hermetic while the
+    original repository mount remains read-only.
+    """
+    bootstrap = (
+        "set -eu; "
+        "mkdir -p /tmp/agentsinc-workspace; "
+        "tar -C /source "
+        "--exclude=.git --exclude=.venv --exclude=__pycache__ "
+        "--exclude=frontend/node_modules --exclude=frontend/.next "
+        "-cf - . | tar -xf - -C /tmp/agentsinc-workspace; "
+    )
+    if working_directory == "frontend":
+        bootstrap += (
+            "if [ -d /opt/agentsinc/frontend/node_modules ] "
+            "&& [ ! -e /tmp/agentsinc-workspace/frontend/node_modules ]; "
+            "then cp -a /opt/agentsinc/frontend/node_modules "
+            "/tmp/agentsinc-workspace/frontend/node_modules; fi; "
+        )
+    return bootstrap + "cd /tmp/agentsinc-workspace/" + working_directory + "; " + command
+
+
 def run_test_suite(suite: str) -> dict[str, Any]:
     """Run a fixed test suite in a network-isolated, resource-limited Docker container."""
     if suite not in TEST_SUITES:
@@ -109,17 +135,7 @@ def run_test_suite(suite: str) -> dict[str, Any]:
 
     source = workspace_root().resolve(strict=True)
     working_directory, command = TEST_SUITES[suite]
-    bootstrap = (
-        "set -eu; "
-        "mkdir -p /tmp/agentsinc-workspace; "
-        "tar -C /source "
-        "--exclude=.git --exclude=.venv --exclude=__pycache__ "
-        "--exclude=frontend/node_modules --exclude=frontend/.next "
-        "-cf - . | tar -xf - -C /tmp/agentsinc-workspace; "
-        "if [ -d /opt/agentsinc/frontend/node_modules ] && [ ! -e /tmp/agentsinc-workspace/frontend/node_modules ]; "
-        "then ln -s /opt/agentsinc/frontend/node_modules /tmp/agentsinc-workspace/frontend/node_modules; fi; "
-        "cd /tmp/agentsinc-workspace/" + working_directory + "; " + command
-    )
+    bootstrap = _build_workspace_bootstrap(working_directory, command)
     args = [
         docker, "run", "--rm",
         "--network", "none",
