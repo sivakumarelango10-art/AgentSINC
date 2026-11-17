@@ -396,10 +396,10 @@ def create_tool_approval(
     now = utc_now()
     with connect() as connection:
         task = connection.execute(
-            "SELECT id, status FROM tasks WHERE id=? AND agent_id=?",
+            "SELECT id, status, cancel_requested FROM tasks WHERE id=? AND agent_id=?",
             (task_id, agent_id),
         ).fetchone()
-        if not task or task["status"] != "running":
+        if not task or task["status"] != "running" or task["cancel_requested"]:
             raise ValueError("The task is no longer running; no tool approval can be requested.")
         connection.execute(
             """INSERT INTO tool_approvals
@@ -463,10 +463,10 @@ def resolve_tool_approval(
         ).fetchone()
         if not row:
             return None
-        if row["status"] != "pending":
+        if row["status"] not in {"pending", "executing"}:
             raise ValueError("This approval request has already been resolved.")
         connection.execute(
-            "UPDATE tool_approvals SET status=?, result=?, resolved_at=? WHERE id=? AND status='pending'",
+            "UPDATE tool_approvals SET status=?, result=?, resolved_at=? WHERE id=? AND status IN ('pending','executing')",
             (status, str(result or "")[:12000], now, approval_id),
         )
         task = connection.execute(
@@ -490,3 +490,83 @@ def resolve_tool_approval(
         ).fetchone()
         connection.commit()
         return tool_approval_to_dict(updated)
+
+
+def claim_tool_approval(approval_id: str) -> dict[str, Any] | None:
+    """Atomically reserve a pending approval for one execution attempt."""
+    now = utc_now()
+    with connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        row = connection.execute(
+            "SELECT * FROM tool_approvals WHERE id=?",
+            (approval_id,),
+        ).fetchone()
+        if not row or row["status"] != "pending":
+            connection.rollback()
+            return None
+        task = connection.execute(
+            "SELECT status, cancel_requested FROM tasks WHERE id=? AND agent_id=?",
+            (row["task_id"], row["agent_id"]),
+        ).fetchone()
+        if not task or task["status"] != "running" or task["cancel_requested"]:
+            connection.execute(
+                """UPDATE tool_approvals SET status='rejected', result=?, resolved_at=?
+                WHERE id=? AND status='pending'""",
+                ("Task is no longer active. The proposed action was not executed.", now, approval_id),
+            )
+            add_event(
+                connection, row["agent_id"], row["task_id"], "tool_approval_expired",
+                "A pending tool action was invalidated because its mission stopped.",
+            )
+            connection.commit()
+            return None
+        updated = connection.execute(
+            "UPDATE tool_approvals SET status='executing' WHERE id=? AND status='pending'",
+            (approval_id,),
+        )
+        if updated.rowcount != 1:
+            connection.rollback()
+            return None
+        claimed = connection.execute(
+            "SELECT * FROM tool_approvals WHERE id=?",
+            (approval_id,),
+        ).fetchone()
+        add_event(
+            connection, row["agent_id"], row["task_id"], "tool_approval_execution_started",
+            f"Founder-approved {row['tool_name']} action is executing.",
+        )
+        connection.commit()
+        return tool_approval_to_dict(claimed)
+
+
+def close_active_tool_approvals(
+    connection: sqlite3.Connection,
+    task_id: str,
+    status: str,
+    message: str,
+) -> int:
+    """Close pending/in-flight approval records when their task stops."""
+    if status not in {"rejected", "failed"}:
+        raise ValueError("Only rejected or failed are terminal cleanup states.")
+    rows = connection.execute(
+        "SELECT id, agent_id FROM tool_approvals WHERE task_id=? AND status IN ('pending','executing')",
+        (task_id,),
+    ).fetchall()
+    if not rows:
+        return 0
+    now = utc_now()
+    connection.execute(
+        """UPDATE tool_approvals SET status=?, result=?, resolved_at=?
+        WHERE task_id=? AND status IN ('pending','executing')""",
+        (status, str(message or "")[:12000], now, task_id),
+    )
+    for row in rows:
+        add_event(
+            connection,
+            row["agent_id"],
+            task_id,
+            "tool_approval_expired",
+            str(message or "Mission ended; pending action was not executed.")[:600],
+        )
+    return len(rows)
+

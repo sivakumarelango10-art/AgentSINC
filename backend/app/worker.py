@@ -10,7 +10,10 @@ from typing import Any
 
 import httpx
 
-from .db import add_event, connect, get_runtime_value, recall_agent_memories, remember_completed_task, set_runtime_value, utc_now
+from .db import (
+    add_event, close_active_tool_approvals, connect, get_runtime_value,
+    recall_agent_memories, remember_completed_task, set_runtime_value, utc_now,
+)
 from .research import fetch_google_search_context, google_search_is_enabled
 from .workspace import WorkspaceError, build_workspace_context
 from .orchestrator import (
@@ -380,6 +383,12 @@ def _cancel_task(task: dict[str, Any], message: str = "Mission cancelled.") -> N
             WHERE id=? AND current_task_id=?""",
             (now, task["agent_id"], task["id"]),
         )
+        close_active_tool_approvals(
+            connection,
+            task["id"],
+            "rejected",
+            "Mission cancelled. Any pending action was not executed.",
+        )
         add_event(connection, task["agent_id"], task["id"], "mission_cancelled", message)
         connection.commit()
 
@@ -397,6 +406,12 @@ def _fail_task(task: dict[str, Any], error: str) -> None:
             status=CASE WHEN is_paused=1 THEN 'paused' ELSE 'failed' END, updated_at=?
             WHERE id=? AND current_task_id=?""",
             (now, task["agent_id"], task["id"]),
+        )
+        close_active_tool_approvals(
+            connection,
+            task["id"],
+            "failed",
+            "Mission failed. Any pending action was not executed.",
         )
         add_event(connection, task["agent_id"], task["id"], "mission_failed",
                   f'Mission failed: {safe_error[:220]}')
@@ -610,6 +625,12 @@ def _recover_interrupted_missions() -> None:
         ).fetchall()
         for row in rows:
             was_cancelled = bool(row["cancel_requested"] or row["parent_cancelled"])
+            close_active_tool_approvals(
+                connection,
+                row["id"],
+                "rejected" if was_cancelled else "failed",
+                "Worker restarted before this action completed. No new side effect was started.",
+            )
             if was_cancelled:
                 connection.execute(
                     """UPDATE tasks SET status='cancelled', cancel_requested=0,

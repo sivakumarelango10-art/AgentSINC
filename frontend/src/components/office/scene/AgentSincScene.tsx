@@ -1072,7 +1072,7 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
     const { canvas } = display;
     const width = canvas.width;
     const height = canvas.height;
-    const status = agent?.taskStatus ?? "idle";
+    const status = agent?.status === "waiting" ? "waiting" : agent?.taskStatus ?? "idle";
     const accent = agent?.color ?? "#2676E8";
     const title = agent?.currentTask && agent.currentTask !== "No active mission assigned"
       ? agent.currentTask
@@ -1100,7 +1100,7 @@ function WorkstationScreen({ agent }: { agent?: OfficeAgent }) {
 
     // A status indicator tied to the actual task lifecycle.
     const stateColor = status === "running" ? "#4ADE80"
-      : status === "queued" ? "#FBBF24"
+      : status === "queued" || status === "waiting" ? "#FBBF24"
         : status === "failed" ? "#F87171"
           : status === "completed" ? "#60A5FA"
             : "#94A3B8";

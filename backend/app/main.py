@@ -14,7 +14,7 @@ from .db import (
     add_event, agent_to_dict, connect, create_task, create_orchestration,
     event_to_dict, get_orchestration_detail, init_db, orchestration_to_dict,
     set_runtime_value, task_to_dict, utc_now,
-    get_tool_approval, list_tool_approvals, resolve_tool_approval,
+    claim_tool_approval, get_tool_approval, list_tool_approvals, resolve_tool_approval,
 )
 from .agent_write import write_agent_file
 from .mcp_registry import MCPRegistry, MCPRegistryError, configured_mcp_server_count
@@ -281,8 +281,21 @@ def create_app() -> FastAPI:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             return {"approval": resolved}
 
-        tool_name = approval["tool_name"]
-        arguments = approval["payload"] or {}
+        # Claim the approval atomically before the first side effect.
+        # This also verifies the task is still running and wasn't cancelled.
+        claimed = claim_tool_approval(approval_id)
+        if not claimed:
+            latest = get_tool_approval(approval_id)
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    latest.get("result") if latest and latest.get("result")
+                    else "This approval is no longer pending or its mission has stopped."
+                ),
+            )
+
+        tool_name = claimed["tool_name"]
+        arguments = claimed["payload"] or {}
         try:
             if tool_name == "workspace.write_file":
                 result = write_agent_file(
