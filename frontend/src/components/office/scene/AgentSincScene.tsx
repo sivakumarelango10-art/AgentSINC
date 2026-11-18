@@ -176,7 +176,7 @@ export function AgentSincScene({
       avatar.position.z - 0.38,
     );
     if (state.focusRemaining > 0) {
-      const cameraGoal = target.clone().add(new THREE.Vector3(3.9, 2.55, 4.8));
+      const cameraGoal = target.clone().add(new THREE.Vector3(3.35, 2.1, 4.35));
       const blend = 1 - Math.exp(-3.8 * delta);
       camera.position.lerp(cameraGoal, blend);
       if (controlsRef.current) {
@@ -270,8 +270,8 @@ export function AgentSincScene({
         dampingFactor={0.075}
         minDistance={8}
         maxDistance={33}
-        minPolarAngle={0.38}
-        maxPolarAngle={Math.PI / 2.08}
+        minPolarAngle={0.56}
+        maxPolarAngle={Math.PI / 2.01}
         minAzimuthAngle={-Math.PI / 1.45}
         maxAzimuthAngle={Math.PI / 1.45}
         screenSpacePanning={false}
@@ -430,7 +430,7 @@ function OfficeZone({
 }) {
   const [x, z] = position;
   const [width, depth] = size;
-  const opacity = focused ? 0.105 : 0.045;
+  const opacity = focused ? 0.09 : 0.035;
 
   return (
     <group position={[x, 0, z]}>
@@ -440,7 +440,7 @@ function OfficeZone({
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.021, 0]}>
         <planeGeometry args={[width - 0.22, depth - 0.22]} />
-        <meshStandardMaterial color={color} transparent opacity={focused ? 0.095 : 0.045} roughness={0.86} />
+        <meshStandardMaterial color={color} transparent opacity={opacity} roughness={0.9} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.026, depth / 2 - 0.16]}>
         <planeGeometry args={[width - 0.42, 0.035]} />
@@ -456,7 +456,7 @@ function OfficeZone({
       </mesh>
       <mesh position={[width / 2, 0.06, 0]}>
         <boxGeometry args={[0.06, 0.12, depth]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.035} />
       </mesh>
       <GlassDivider color={color} width={width} depth={depth} />
       <WorkDesk color={color} agent={agent} />
@@ -487,7 +487,7 @@ function GlassDivider({ color, width, depth }: { color: string; width: number; d
       </mesh>
       <mesh position={[0, 2, -depth / 2 + 0.04]}>
         <boxGeometry args={[width, 0.035, 0.07]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.55} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.12} />
       </mesh>
     </group>
   );
