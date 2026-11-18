@@ -198,7 +198,7 @@ export default function OfficeViewport({
         fallback={<span>WebGL 2 is unavailable in this browser.</span>}
         shadows
         dpr={[1, 1.25]}
-        camera={{ position: [14.5, 8.4, 17.5], fov: 39, near: 0.1, far: 140 }}
+        camera={{ position: [14.5, 8.4, 17.5], fov: 39, near: 0.1, far: 180 }}
         gl={{
           antialias: true,
           alpha: false,

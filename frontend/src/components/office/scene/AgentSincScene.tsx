@@ -1,11 +1,11 @@
 "use client";
 
-import { OrbitControls } from "@react-three/drei";
+import { Html, OrbitControls } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { OfficeAgent } from "../types";
+import { STATUS_LABELS, type OfficeAgent } from "../types";
 
 type AgentAvatarManifest = {
   enabled?: boolean;
@@ -261,14 +261,15 @@ export function AgentSincScene({
 
   return (
     <>
-      <color attach="background" args={["#EAF0F6"]} />
-      <fog attach="fog" args={["#EAF0F6", 34, 68]} />
-      <ambientLight intensity={0.42} />
-      <hemisphereLight args={["#FFFFFF", "#AEB8C5", 0.92]} />
+      <color attach="background" args={["#DFE8EE"]} />
+      <fog attach="fog" args={["#E5ECF0", 43, 92]} />
+      <ambientLight intensity={0.34} />
+      <hemisphereLight args={["#FFF7E9", "#91A08F", 0.82]} />
       <directionalLight
         castShadow
+        color="#FFF0D8"
         position={[-9, 17, 11]}
-        intensity={2.35}
+        intensity={2.65}
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-camera-left={-18}
@@ -280,10 +281,11 @@ export function AgentSincScene({
         shadow-bias={-0.00008}
         shadow-normalBias={0.025}
       />
-      <directionalLight position={[10, 8, -8]} color="#E9F3FF" intensity={0.42} />
+      <directionalLight position={[10, 8, -8]} color="#C9DDF0" intensity={0.5} />
       <pointLight position={[-9, 4.4, -4]} color="#F7F9FC" intensity={0.16} distance={22} />
       <pointLight position={[9, 4.2, 5]} color="#FFF7EB" intensity={0.12} distance={20} />
 
+      <CampusExterior />
       <OfficeFloor floorColor={palette.floor} accent={palette.accent} />
       <OfficeArchitecture accent={palette.accent} secondary={palette.secondary} />
       {roomLayout.map((room) => (
@@ -427,6 +429,103 @@ function CeilingLights({ accent }: { accent: string }) {
             <meshBasicMaterial color={index % 2 === 0 ? "#FFF4D6" : "#E6F4FF"} />
           </mesh>
           <pointLight position={[0, -0.58, 0]} color={index % 2 === 0 ? "#FFF1D0" : accent} intensity={0.25} distance={7} />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+type CampusBlock = {
+  position: [number, number, number];
+  size: [number, number, number];
+  color: string;
+  floors: number;
+  columns: number;
+};
+
+const CAMPUS_BLOCKS: CampusBlock[] = [
+  { position: [-27, -0.76, -24], size: [8.5, 10, 7], color: "#D4DEE7", floors: 4, columns: 4 },
+  { position: [-14, -0.76, -29], size: [9, 13, 7], color: "#C8D5E1", floors: 5, columns: 4 },
+  { position: [0, -0.76, -31], size: [10, 9, 8], color: "#DFE6EC", floors: 3, columns: 5 },
+  { position: [15, -0.76, -28], size: [9, 12, 7], color: "#CFDCE6", floors: 5, columns: 4 },
+  { position: [28, -0.76, -23], size: [8, 9, 7], color: "#DCE4EA", floors: 4, columns: 4 },
+];
+
+const CAMPUS_TREES: Array<{ x: number; z: number; scale: number; tint: string }> = [
+  { x: -20, z: -13, scale: 1.05, tint: "#6F8C68" },
+  { x: -7, z: -16, scale: 0.82, tint: "#7F9B71" },
+  { x: 9, z: -15, scale: 0.94, tint: "#6D8964" },
+  { x: 22, z: -13, scale: 1.12, tint: "#78946B" },
+  { x: -29, z: -5, scale: 0.8, tint: "#78946B" },
+  { x: 30, z: -4, scale: 0.88, tint: "#6F8C68" },
+];
+
+function CampusExterior() {
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.76, -23]} receiveShadow>
+        <planeGeometry args={[150, 120]} />
+        <meshStandardMaterial color="#D8E3D7" roughness={1} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.74, -17.2]} receiveShadow>
+        <planeGeometry args={[110, 3.2]} />
+        <meshStandardMaterial color="#B9C5CE" roughness={0.92} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.72, -17.2]}>
+        <planeGeometry args={[110, 0.1]} />
+        <meshBasicMaterial color="#F7F2E7" />
+      </mesh>
+
+      {CAMPUS_BLOCKS.map((building, index) => {
+        const [width, height, depth] = building.size;
+        return (
+          <group key={index} position={building.position}>
+            <mesh position={[0, height / 2, 0]} castShadow receiveShadow>
+              <boxGeometry args={building.size} />
+              <meshPhysicalMaterial color={building.color} roughness={0.78} metalness={0.04} />
+            </mesh>
+            <mesh position={[0, height + 0.06, 0]}>
+              <boxGeometry args={[width + 0.28, 0.16, depth + 0.28]} />
+              <meshStandardMaterial color="#AEBBC7" roughness={0.58} metalness={0.12} />
+            </mesh>
+            {Array.from({ length: building.floors }, (_, floor) =>
+              Array.from({ length: building.columns }, (_, column) => (
+                <mesh
+                  key={`${floor}-${column}`}
+                  position={[
+                    -width * 0.37 + (column * width * 0.74) / Math.max(1, building.columns - 1),
+                    1.15 + floor * 1.72,
+                    depth / 2 + 0.012,
+                  ]}
+                >
+                  <boxGeometry args={[width * 0.095, 0.82, 0.035]} />
+                  <meshPhysicalMaterial
+                    color="#8EABC1"
+                    roughness={0.3}
+                    metalness={0.16}
+                    clearcoat={0.3}
+                  />
+                </mesh>
+              )),
+            )}
+          </group>
+        );
+      })}
+
+      {CAMPUS_TREES.map((tree, index) => (
+        <group key={index} position={[tree.x, -0.76, tree.z]} scale={tree.scale}>
+          <mesh position={[0, 0.72, 0]} castShadow>
+            <cylinderGeometry args={[0.075, 0.12, 1.44, 8]} />
+            <meshStandardMaterial color="#80664C" roughness={0.95} />
+          </mesh>
+          <mesh position={[0, 1.62, 0]} castShadow>
+            <sphereGeometry args={[0.72, 12, 10]} />
+            <meshStandardMaterial color={tree.tint} roughness={0.98} />
+          </mesh>
+          <mesh position={[-0.34, 1.42, 0.08]} castShadow>
+            <sphereGeometry args={[0.45, 10, 8]} />
+            <meshStandardMaterial color={tree.tint} roughness={0.98} />
+          </mesh>
         </group>
       ))}
     </group>
@@ -1087,6 +1186,24 @@ function AgentAvatar({
         <torusGeometry args={[selected ? 0.7 : 0.53, selected ? 0.026 : 0.014, 12, 72]} />
         <meshBasicMaterial color={agent.color} transparent opacity={selected ? 0.52 : 0.09} />
       </mesh>
+
+      <Html position={[0, 2.5, 0]} center distanceFactor={10} zIndexRange={[90, 0]}>
+        <button
+          type="button"
+          className={selected ? "scene-agent-tag selected" : "scene-agent-tag"}
+          style={{ "--agent-color": agent.color } as CSSProperties}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect(agent.id);
+          }}
+          aria-label={`${agent.name}, ${STATUS_LABELS[agent.status]}. Select agent.`}
+        >
+          <i className="scene-agent-tag-presence" aria-hidden="true" />
+          <span>{agent.name}</span>
+          <small>{STATUS_LABELS[agent.status]}</small>
+        </button>
+      </Html>
 
       {humanModel ? <primitive object={humanModel} /> : null}
 

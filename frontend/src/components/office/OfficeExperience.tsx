@@ -451,6 +451,34 @@ export function OfficeExperience() {
         </div>
       </header>
 
+      <section className="agent-fleet-strip" aria-label="Live agent fleet">
+        <div className="fleet-strip-heading">
+          <span>{runtimeReady ? "LIVE AGENT FLEET" : "LOCAL AGENT FLEET"}</span>
+          <strong>{runningAgentCount.toString().padStart(2, "0")} ACTIVE / {agents.length.toString().padStart(2, "0")} TOTAL</strong>
+        </div>
+        <div className="fleet-strip-list">
+          {agents.map((agent) => (
+            <button
+              key={agent.id}
+              type="button"
+              className={agent.id === selectedAgentId ? "fleet-agent-chip selected" : "fleet-agent-chip"}
+              style={{ "--agent-color": agent.color } as CSSProperties}
+              onClick={() => selectAgent(agent.id)}
+              aria-pressed={agent.id === selectedAgentId}
+              aria-label={`${agent.name}, ${STATUS_LABELS[agent.status]}. Select agent.`}
+              title={`${agent.name} · ${STATUS_LABELS[agent.status]}`}
+            >
+              <span className="fleet-agent-initial">{agent.id === "ceo" ? "✳" : agent.name.slice(0, 1)}</span>
+              <span className="fleet-agent-copy">
+                <strong>{agent.name}</strong>
+                <small>{STATUS_LABELS[agent.status]}</small>
+              </span>
+              <i className={`fleet-agent-presence ${statusClass(agent.status)}`} aria-hidden="true" />
+            </button>
+          ))}
+        </div>
+      </section>
+
       <aside className="world-rail" aria-label="Workspace panels">
         <div className="rail-top-glyph">S</div>
         <div className="rail-divider" />
@@ -495,6 +523,31 @@ export function OfficeExperience() {
           </div>
         ) : null}
       </section>
+
+      <div className="scene-view-hud" aria-label="3D office view controls">
+        <span className="scene-view-label"><i /> SPATIAL OFFICE</span>
+        <button
+          type="button"
+          className={followSelectedAgent ? "scene-view-action active" : "scene-view-action"}
+          onClick={() => {
+            setFollowSelectedAgent((current) => !current);
+            setAgentFocusRequest((value) => value + 1);
+          }}
+          aria-pressed={followSelectedAgent}
+        >
+          <span aria-hidden="true">◎</span>
+          {followSelectedAgent ? "TRACKING AGENT" : "FREE ORBIT"}
+        </button>
+        <button
+          type="button"
+          className={showMap ? "scene-view-action active" : "scene-view-action"}
+          onClick={() => setShowMap((current) => !current)}
+          aria-pressed={showMap}
+        >
+          <span aria-hidden="true">▦</span>
+          {showMap ? "FLOOR MAP" : "3D FLOOR"}
+        </button>
+      </div>
 
       <section className="room-dock" aria-label="Office rooms">
         <span className="dock-label">EXPLORE FLOOR</span>
