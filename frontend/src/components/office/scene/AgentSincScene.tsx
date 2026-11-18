@@ -32,6 +32,75 @@ const roomLayout = [
   { id: "quality", label: "QUALITY LAB", agentId: "tester", position: [6.3, 4.25] as [number, number], size: [5.1, 3.8] as [number, number], color: "#16A34A" },
 ];
 
+type DiscussionSeat = {
+  agentId: string;
+  position: [number, number, number];
+  rotationY: number;
+};
+
+// One source of truth for the six discussion-room chairs and agent destinations.
+// Coordinates are local to the discussion-room centre.
+const DISCUSSION_ROOM_CENTER_Z = 4.15;
+const DISCUSSION_TABLE_RADIUS = 1.1;
+const DISCUSSION_CHAIR_FOOTPRINT_RADIUS = 0.34;
+const DISCUSSION_ROOM_HALF_WIDTH = 2.35;
+const DISCUSSION_ROOM_HALF_DEPTH = 1.45;
+const DISCUSSION_SEAT_POSITIONS: Array<{
+  agentId: string;
+  position: [number, number, number];
+}> = [
+  { agentId: "ceo", position: [-1.65, 0, 0] },
+  { agentId: "team_lead", position: [1.65, 0, 0] },
+  { agentId: "developer", position: [-1.15, 0, -0.95] },
+  { agentId: "designer", position: [1.15, 0, -0.95] },
+  { agentId: "researcher", position: [-1.15, 0, 0.95] },
+  { agentId: "tester", position: [1.15, 0, 0.95] },
+];
+
+const DISCUSSION_ROOM_SEATS: DiscussionSeat[] = DISCUSSION_SEAT_POSITIONS.map((seat) => ({
+  ...seat,
+  // OfficeChair faces along local +Z. Rotate that forward axis toward the table.
+  rotationY: Math.atan2(-seat.position[0], -seat.position[2]),
+}));
+
+const discussionSeatsAreSeparated = DISCUSSION_ROOM_SEATS.every((seat, index) =>
+  DISCUSSION_ROOM_SEATS.slice(index + 1).every((other) =>
+    Math.hypot(
+      seat.position[0] - other.position[0],
+      seat.position[2] - other.position[2],
+    ) > 0.95
+  )
+);
+
+const discussionSeatLayoutIsValid =
+  DISCUSSION_ROOM_SEATS.length === 6 &&
+  new Set(DISCUSSION_ROOM_SEATS.map((seat) => seat.agentId)).size === 6 &&
+  discussionSeatsAreSeparated &&
+  DISCUSSION_ROOM_SEATS.every((seat) => {
+    const [x, , z] = seat.position;
+    const radialDistance = Math.hypot(x, z);
+    return (
+      radialDistance > DISCUSSION_TABLE_RADIUS + DISCUSSION_CHAIR_FOOTPRINT_RADIUS &&
+      Math.abs(x) + DISCUSSION_CHAIR_FOOTPRINT_RADIUS < DISCUSSION_ROOM_HALF_WIDTH &&
+      Math.abs(z) + DISCUSSION_CHAIR_FOOTPRINT_RADIUS < DISCUSSION_ROOM_HALF_DEPTH
+    );
+  });
+
+if (!discussionSeatLayoutIsValid) {
+  throw new Error("Discussion-room seat layout intersects the table, room boundary, or another seat.");
+}
+
+const discussionLocationTargets = Object.fromEntries(
+  DISCUSSION_ROOM_SEATS.map((seat) => [
+    seat.agentId,
+    [
+      seat.position[0],
+      seat.position[1],
+      DISCUSSION_ROOM_CENTER_Z + seat.position[2],
+    ] as [number, number, number],
+  ]),
+) as Record<string, [number, number, number]>;
+
 const officeLocationTargets: Record<string, Record<string, [number, number, number]>> = {
   command: {
     developer: [-1.35, 0, -4.25],
@@ -39,14 +108,7 @@ const officeLocationTargets: Record<string, Record<string, [number, number, numb
     researcher: [-1.35, 0, -5.25],
     tester: [1.35, 0, -5.25],
   },
-  discussion: {
-    ceo: [-1.65, 0, 4.15],
-    team_lead: [0, 0, 4.15],
-    developer: [-1.05, 0, 3.5],
-    designer: [1.05, 0, 3.5],
-    researcher: [-1.05, 0, 4.9],
-    tester: [1.05, 0, 4.9],
-  },
+  discussion: discussionLocationTargets,
   meeting: {
     ceo: [0, 0, 6.15],
     team_lead: [0, 0, 7.6],
@@ -64,7 +126,7 @@ const roomTargets: Record<string, [number, number, number]> = {
   design: [6.3, 0.55, -0.9],
   research: [-6.3, 0.55, 4.25],
   quality: [6.3, 0.55, 4.25],
-  discussion: [0, 0.72, 4.15],
+  discussion: [0, 0.72, DISCUSSION_ROOM_CENTER_Z],
   meeting: [0, 0.8, 7.55],
 };
 
@@ -176,7 +238,7 @@ export function AgentSincScene({
       ))}
 
       <CentralCommandHub accent={palette.accent} secondary={palette.secondary} />
-      <GlassMeetingRoom accent={palette.secondary} />
+      <GlassMeetingRoom accent={palette.secondary} seats={DISCUSSION_ROOM_SEATS} />
       <ConferenceRoom accent={palette.accent} secondary={palette.secondary} />
       <ReceptionArch accent={palette.secondary} />
       <CeilingLights accent={palette.accent} />
@@ -560,15 +622,15 @@ function CentralCommandHub({ accent, secondary }: { accent: string; secondary: s
   );
 }
 
-function GlassMeetingRoom({ accent }: { accent: string }) {
-  const seats = [
-    { position: [0, 0, -1.15] as [number, number, number], rotation: 0 },
-    { position: [0, 0, 1.15] as [number, number, number], rotation: Math.PI },
-    { position: [-1.6, 0, 0] as [number, number, number], rotation: Math.PI / 2 },
-    { position: [1.6, 0, 0] as [number, number, number], rotation: -Math.PI / 2 },
-  ];
+function GlassMeetingRoom({
+  accent,
+  seats,
+}: {
+  accent: string;
+  seats: DiscussionSeat[];
+}) {
   return (
-    <group position={[0, 0, 4.15]}>
+    <group position={[0, 0, DISCUSSION_ROOM_CENTER_Z]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.025, 0]} receiveShadow>
         <planeGeometry args={[4.7, 2.9]} />
         <meshPhysicalMaterial color="#DCE7F2" roughness={0.48} metalness={0.05} />
@@ -591,8 +653,12 @@ function GlassMeetingRoom({ accent }: { accent: string }) {
         <cylinderGeometry args={[1.02, 1.1, 0.16, 12]} />
         <meshPhysicalMaterial color="#B9C5D4" roughness={0.3} metalness={0.18} clearcoat={0.45} />
       </mesh>
-      {seats.map((seat, index) => (
-        <group key={index} position={seat.position} rotation={[0, seat.rotation, 0]}>
+      {seats.map((seat) => (
+        <group
+          key={seat.agentId}
+          position={seat.position}
+          rotation={[0, seat.rotationY, 0]}
+        >
           <OfficeChair color={accent} position={[0, 0, 0]} />
         </group>
       ))}
@@ -826,7 +892,7 @@ function AgentAvatar({
         ? Math.abs(Math.sin(time * 10 + bobOffset)) * 0.045
         : Math.sin(time * 1.8 + bobOffset) * 0.012;
       const socialCenter = agent.location === "discussion"
-        ? [0, 0, 4.15] as [number, number, number]
+        ? [0, 0, DISCUSSION_ROOM_CENTER_Z] as [number, number, number]
         : agent.location === "meeting"
           ? [0, 0, 7.6] as [number, number, number]
           : null;
