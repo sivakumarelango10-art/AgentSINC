@@ -7,6 +7,64 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { OfficeAgent } from "../types";
 
+type AgentAvatarManifest = {
+  enabled?: boolean;
+  agents?: string[];
+};
+
+type LoadedAgentAvatar = {
+  model: THREE.Group;
+  animations: THREE.AnimationClip[];
+};
+
+let agentAvatarManifestPromise: Promise<AgentAvatarManifest | null> | null = null;
+const agentAvatarAssetPromises = new Map<string, Promise<LoadedAgentAvatar | null>>();
+let agentAvatarLoadQueue: Promise<void> = Promise.resolve();
+
+function loadAgentAvatar(agentId: string): Promise<LoadedAgentAvatar | null> {
+  const cached = agentAvatarAssetPromises.get(agentId);
+  if (cached) return cached;
+
+  const pending = (async (): Promise<LoadedAgentAvatar | null> => {
+    if (!agentAvatarManifestPromise) {
+      agentAvatarManifestPromise = fetch("/models/agents/manifest.json")
+        .then((response) => response.ok
+          ? response.json() as Promise<AgentAvatarManifest>
+          : null
+        )
+        .catch(() => null);
+    }
+
+    const manifest = await agentAvatarManifestPromise;
+    if (!manifest?.enabled || !manifest.agents?.includes(agentId)) return null;
+
+    // Parse at most one high-detail character at a time to keep startup memory predictable.
+    const modelLoad = agentAvatarLoadQueue.then(() =>
+      new GLTFLoader().loadAsync(`/models/agents/${agentId}.glb`)
+    );
+    agentAvatarLoadQueue = modelLoad.then(() => undefined, () => undefined);
+
+    const gltf = await modelLoad;
+    gltf.scene.traverse((node) => {
+      const mesh = node as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = false;
+      }
+    });
+
+    return { model: gltf.scene, animations: gltf.animations };
+  })().catch((error: unknown) => {
+    console.warn(`AgentSINC avatar '${agentId}' could not be loaded; using its lightweight fallback.`, error);
+    agentAvatarAssetPromises.delete(agentId);
+    return null;
+  });
+
+  agentAvatarAssetPromises.set(agentId, pending);
+  return pending;
+}
+
+
 type Palette = {
   label: string;
   accent: string;
@@ -211,8 +269,8 @@ export function AgentSincScene({
         castShadow
         position={[-9, 17, 11]}
         intensity={2.35}
-        shadow-mapSize-width={4096}
-        shadow-mapSize-height={4096}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-left={-18}
         shadow-camera-right={18}
         shadow-camera-top={18}
@@ -892,51 +950,18 @@ function AgentAvatar({
 
   useEffect(() => {
     let mounted = true;
-    let loadStarted = false;
 
-    void fetch("/models/agents/manifest.json", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((manifest: { enabled?: boolean; agents?: string[] } | null) => {
-        if (!mounted || !manifest?.enabled || !manifest.agents?.includes(agent.id)) return;
-        loadStarted = true;
-        const loader = new GLTFLoader();
-        loader.load(
-          `/models/agents/${agent.id}.glb`,
-          (gltf) => {
-            if (!mounted) return;
-            gltf.scene.traverse((node) => {
-              const mesh = node as THREE.Mesh;
-              if (mesh.isMesh) {
-                mesh.castShadow = true;
-                mesh.receiveShadow = true;
-              }
-            });
-            setHumanAnimations(gltf.animations);
-            setHumanModel(gltf.scene);
-          },
-          undefined,
-          () => {
-            if (mounted) {
-              setHumanAnimations([]);
-              setHumanModel(null);
-            }
-          },
-        );
-      })
-      .catch(() => {
-        if (mounted) {
-          setHumanAnimations([]);
-          setHumanModel(null);
-        }
-      });
+    void loadAgentAvatar(agent.id).then((asset) => {
+      if (!mounted || !asset) return;
+      setHumanAnimations(asset.animations);
+      setHumanModel(asset.model);
+    });
 
     return () => {
       mounted = false;
-      if (loadStarted) {
-        humanActionRef.current?.stop();
-        humanActionRef.current = null;
-        humanActionNameRef.current = null;
-      }
+      humanActionRef.current?.stop();
+      humanActionRef.current = null;
+      humanActionNameRef.current = null;
     };
   }, [agent.id]);
 
