@@ -1077,16 +1077,7 @@ html, body { background: #EEF2F6; color: #1D2939; }
   .scene-view-hud { right: 334px; }
 }
 @media (max-width: 900px) {
-  .agent-fleet-strip {
-    top: 78px;
-    left: 72px;
-    right: 10px;
-    min-height: 45px;
-    padding: 4px;
-  }
-  .fleet-agent-chip { min-width: 88px; padding: 4px 6px; }
-  .fleet-agent-initial { width: 24px; height: 24px; flex-basis: 24px; }
-  .fleet-agent-copy small { display: none; }
+  .agent-fleet-strip { display: none; }
   .scene-view-hud { right: 10px; bottom: 70px; }
   .scene-view-label { display: none; }
 }

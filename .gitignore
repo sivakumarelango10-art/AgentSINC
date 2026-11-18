@@ -1,0 +1,55 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+secrets/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+.vercel/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local databases and runtime state
+*.db
+*.sqlite
+*.sqlite3
+backend/data/
+storage/
+uploads/
+.agent-sinc/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test and build outputs
+coverage/
+playwright-report/
+test-results/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

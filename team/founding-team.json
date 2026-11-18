@@ -1,0 +1,17 @@
+{
+  "organization": "SINC",
+  "product": "AgentSINC",
+  "members": [
+    { "id": "elango-s", "name": "Elango S", "role": "Founder", "group": "founding_team" },
+    { "id": "karmjit-sg", "name": "Karmjit SG", "role": "Co-founder", "group": "founding_team" },
+    { "id": "prajith-p", "name": "Prajith P", "role": "Co-founder", "group": "founding_team" },
+    { "id": "aaditya-rm", "name": "Aaditya R M", "role": "Founding Advisor", "group": "founding_team" },
+    { "id": "vaishnavi-m", "name": "Vaishnavi M", "role": "Tester", "group": "team" },
+    { "id": "meghana-p-banda", "name": "Meghana P Banda", "role": "Tester", "group": "team" },
+    { "id": "dhakshatha-s", "name": "Dhakshatha S", "role": "Developer & Social Media Team", "group": "team" },
+    { "id": "ishita-das", "name": "Ishita Das", "role": "Designer", "group": "team" },
+    { "id": "mohana-priya-g", "name": "Mohana Priya G", "role": "Designer", "group": "team" },
+    { "id": "dhanusri-t", "name": "Dhanusri T", "role": "Tester & Developer", "group": "team" },
+    { "id": "gopika-s", "name": "Gopika S", "role": "Developer", "group": "team" }
+  ]
+}

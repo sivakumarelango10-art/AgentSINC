@@ -444,11 +444,11 @@ type CampusBlock = {
 };
 
 const CAMPUS_BLOCKS: CampusBlock[] = [
-  { position: [-27, -0.48, -24], size: [8.5, 10, 7], color: "#D4DEE7", floors: 4, columns: 4 },
-  { position: [-14, -0.48, -29], size: [9, 13, 7], color: "#C8D5E1", floors: 5, columns: 4 },
-  { position: [0, -0.48, -31], size: [10, 9, 8], color: "#DFE6EC", floors: 3, columns: 5 },
-  { position: [15, -0.48, -28], size: [9, 12, 7], color: "#CFDCE6", floors: 5, columns: 4 },
-  { position: [28, -0.48, -23], size: [8, 9, 7], color: "#DCE4EA", floors: 4, columns: 4 },
+  { position: [-27, -0.76, -24], size: [8.5, 10, 7], color: "#D4DEE7", floors: 4, columns: 4 },
+  { position: [-14, -0.76, -29], size: [9, 13, 7], color: "#C8D5E1", floors: 5, columns: 4 },
+  { position: [0, -0.76, -31], size: [10, 9, 8], color: "#DFE6EC", floors: 3, columns: 5 },
+  { position: [15, -0.76, -28], size: [9, 12, 7], color: "#CFDCE6", floors: 5, columns: 4 },
+  { position: [28, -0.76, -23], size: [8, 9, 7], color: "#DCE4EA", floors: 4, columns: 4 },
 ];
 
 const CAMPUS_TREES: Array<{ x: number; z: number; scale: number; tint: string }> = [
@@ -463,15 +463,15 @@ const CAMPUS_TREES: Array<{ x: number; z: number; scale: number; tint: string }>
 function CampusExterior() {
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.51, -23]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.76, -23]} receiveShadow>
         <planeGeometry args={[150, 120]} />
         <meshStandardMaterial color="#D8E3D7" roughness={1} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.49, -17.2]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.74, -17.2]} receiveShadow>
         <planeGeometry args={[110, 3.2]} />
         <meshStandardMaterial color="#B9C5CE" roughness={0.92} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.475, -17.2]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.72, -17.2]}>
         <planeGeometry args={[110, 0.1]} />
         <meshBasicMaterial color="#F7F2E7" />
       </mesh>
@@ -513,7 +513,7 @@ function CampusExterior() {
       })}
 
       {CAMPUS_TREES.map((tree, index) => (
-        <group key={index} position={[tree.x, -0.49, tree.z]} scale={tree.scale}>
+        <group key={index} position={[tree.x, -0.76, tree.z]} scale={tree.scale}>
           <mesh position={[0, 0.72, 0]} castShadow>
             <cylinderGeometry args={[0.075, 0.12, 1.44, 8]} />
             <meshStandardMaterial color="#80664C" roughness={0.95} />

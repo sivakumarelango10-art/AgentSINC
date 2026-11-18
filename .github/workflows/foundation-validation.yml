@@ -1,0 +1,51 @@
+name: AgentSINC foundation validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-foundation:
+    name: Validate team data and brand SVGs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate founding team JSON and required roles
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path("team/founding-team.json").read_text(encoding="utf-8"))
+          members = data.get("members", [])
+          assert data.get("organization") == "SINC"
+          assert data.get("product") == "AgentSINC"
+          assert any(m.get("name") == "Gopika S" and m.get("role") == "Developer" for m in members)
+          assert len({m.get("id") for m in members}) == len(members)
+          print(f"Validated {len(members)} team members.")
+          PY
+      - name: Validate supplied logo vector assets
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          paths = sorted(Path("public/brand").glob("*.svg"))
+          assert len(paths) == 3, f"Expected 3 brand variants, found {len(paths)}"
+          for path in paths:
+              root = ET.parse(path).getroot()
+              assert root.tag.endswith("svg"), f"{path} is not an SVG root"
+              assert root.attrib.get("viewBox") == "0 0 200 200", f"{path} has unexpected viewBox"
+              print(f"Validated {path}")
+          PY
