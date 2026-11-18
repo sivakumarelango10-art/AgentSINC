@@ -471,7 +471,7 @@ function CampusExterior() {
         <planeGeometry args={[110, 3.2]} />
         <meshStandardMaterial color="#B9C5CE" roughness={0.92} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.72, -17.2]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.72, -17.2]}>
         <planeGeometry args={[110, 0.1]} />
         <meshBasicMaterial color="#F7F2E7" />
       </mesh>
