@@ -76,7 +76,12 @@ $manifest = [PSCustomObject]@{
     models = $generatedFiles
 }
 $temporaryManifest = "$manifestPath.tmp"
-$manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $temporaryManifest -Encoding UTF8
+$manifestJson = $manifest | ConvertTo-Json -Depth 6
+[System.IO.File]::WriteAllText(
+    $temporaryManifest,
+    $manifestJson,
+    (New-Object System.Text.UTF8Encoding($false))
+)
 Move-Item -LiteralPath $temporaryManifest -Destination $manifestPath -Force
 
 Write-Host ""
