@@ -2,8 +2,9 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { OfficeAgent } from "../types";
 
 type Palette = {
@@ -175,7 +176,7 @@ export function AgentSincScene({
       avatar.position.z - 0.38,
     );
     if (state.focusRemaining > 0) {
-      const cameraGoal = target.clone().add(new THREE.Vector3(3.9, 2.55, 4.8));
+      const cameraGoal = target.clone().add(new THREE.Vector3(3.35, 2.1, 4.35));
       const blend = 1 - Math.exp(-3.8 * delta);
       camera.position.lerp(cameraGoal, blend);
       if (controlsRef.current) {
@@ -204,23 +205,26 @@ export function AgentSincScene({
     <>
       <color attach="background" args={["#EAF0F6"]} />
       <fog attach="fog" args={["#EAF0F6", 34, 68]} />
-      <ambientLight intensity={0.78} />
-      <hemisphereLight args={["#FFFFFF", "#B9C3D0", 1.35]} />
+      <ambientLight intensity={0.42} />
+      <hemisphereLight args={["#FFFFFF", "#AEB8C5", 0.92]} />
       <directionalLight
         castShadow
-        position={[-8, 19, 12]}
-        intensity={3.2}
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-left={-19}
-        shadow-camera-right={19}
-        shadow-camera-top={19}
-        shadow-camera-bottom={-19}
-        shadow-bias={-0.00012}
+        position={[-9, 17, 11]}
+        intensity={2.35}
+        shadow-mapSize-width={4096}
+        shadow-mapSize-height={4096}
+        shadow-camera-left={-18}
+        shadow-camera-right={18}
+        shadow-camera-top={18}
+        shadow-camera-bottom={-18}
+        shadow-camera-near={0.5}
+        shadow-camera-far={48}
+        shadow-bias={-0.00008}
+        shadow-normalBias={0.025}
       />
-      <pointLight position={[-9, 5, -4]} color={palette.accent} intensity={0.55} distance={25} />
-      <pointLight position={[9, 5, 5]} color={palette.secondary} intensity={0.48} distance={24} />
-      <pointLight position={[0, 5.2, -3]} color="#FDE68A" intensity={0.42} distance={20} />
+      <directionalLight position={[10, 8, -8]} color="#E9F3FF" intensity={0.42} />
+      <pointLight position={[-9, 4.4, -4]} color="#F7F9FC" intensity={0.16} distance={22} />
+      <pointLight position={[9, 4.2, 5]} color="#FFF7EB" intensity={0.12} distance={20} />
 
       <OfficeFloor floorColor={palette.floor} accent={palette.accent} />
       <OfficeArchitecture accent={palette.accent} secondary={palette.secondary} />
@@ -266,8 +270,8 @@ export function AgentSincScene({
         dampingFactor={0.075}
         minDistance={8}
         maxDistance={33}
-        minPolarAngle={0.38}
-        maxPolarAngle={Math.PI / 2.08}
+        minPolarAngle={0.56}
+        maxPolarAngle={Math.PI / 2.01}
         minAzimuthAngle={-Math.PI / 1.45}
         maxAzimuthAngle={Math.PI / 1.45}
         screenSpacePanning={false}
@@ -323,14 +327,16 @@ function OfficeArchitecture({ accent, secondary }: { accent: string; secondary: 
           ))}
         </group>
       ))}
-      <mesh position={[0, 4.95, 0]}>
-        <boxGeometry args={[25.8, 0.18, 0.2]} />
-        <meshStandardMaterial color="#CBD3DC" metalness={0.42} roughness={0.36} />
+      {/* The former exposed cross-beams cut through the entire camera view.
+          Keep the room open above the camera, with only slim perimeter structure. */}
+      <mesh position={[0, 4.78, -9.55]}>
+        <boxGeometry args={[25.7, 0.12, 0.16]} />
+        <meshPhysicalMaterial color="#E5EAF0" metalness={0.12} roughness={0.52} />
       </mesh>
-      {[-8.5, -3, 3, 8.5].map((x) => (
-        <mesh key={x} position={[x, 4.92, 0]}>
-          <boxGeometry args={[0.12, 0.16, 19.5]} />
-          <meshStandardMaterial color="#D5DCE4" metalness={0.35} roughness={0.42} />
+      {[-12.45, 12.45].map((x) => (
+        <mesh key={x} position={[x, 4.76, 0]}>
+          <boxGeometry args={[0.12, 0.12, 19.1]} />
+          <meshPhysicalMaterial color="#E6EBF1" metalness={0.12} roughness={0.5} />
         </mesh>
       ))}
       <mesh position={[-11.9, 2.45, -6.8]}>
@@ -376,7 +382,7 @@ function OfficeFloor({ floorColor, accent }: { floorColor: string; accent: strin
         <planeGeometry args={[26, 20]} />
         <meshPhysicalMaterial color={floorColor} roughness={0.32} metalness={0.06} clearcoat={0.24} clearcoatRoughness={0.28} />
       </mesh>
-      <gridHelper args={[26, 52, "#C7D0DB", "#E0E6ED"]} position={[0, -0.105, 0]} />
+      {/* The drafting grid was removed to avoid a CAD/viewport look. */}
       <mesh position={[0, -0.42, 0]}>
         <boxGeometry args={[26.2, 0.55, 20.2]} />
         <meshStandardMaterial color="#D9E0E8" roughness={0.78} metalness={0.04} />
@@ -424,7 +430,7 @@ function OfficeZone({
 }) {
   const [x, z] = position;
   const [width, depth] = size;
-  const opacity = focused ? 0.19 : 0.105;
+  const opacity = focused ? 0.09 : 0.035;
 
   return (
     <group position={[x, 0, z]}>
@@ -434,23 +440,23 @@ function OfficeZone({
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.021, 0]}>
         <planeGeometry args={[width - 0.22, depth - 0.22]} />
-        <meshStandardMaterial color={color} transparent opacity={focused ? 0.095 : 0.045} roughness={0.86} />
+        <meshStandardMaterial color={color} transparent opacity={opacity} roughness={0.9} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.026, depth / 2 - 0.16]}>
         <planeGeometry args={[width - 0.42, 0.035]} />
-        <meshBasicMaterial color={color} transparent opacity={0.68} />
+        <meshBasicMaterial color={color} transparent opacity={0.28} />
       </mesh>
       <mesh position={[0, 0.06, -depth / 2]}>
         <boxGeometry args={[width, 0.12, 0.06]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={focused ? 0.72 : 0.35} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={focused ? 0.16 : 0.045} />
       </mesh>
       <mesh position={[-width / 2, 0.06, 0]}>
         <boxGeometry args={[0.06, 0.12, depth]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.035} />
       </mesh>
       <mesh position={[width / 2, 0.06, 0]}>
         <boxGeometry args={[0.06, 0.12, depth]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.035} />
       </mesh>
       <GlassDivider color={color} width={width} depth={depth} />
       <WorkDesk color={color} agent={agent} />
@@ -481,7 +487,7 @@ function GlassDivider({ color, width, depth }: { color: string; width: number; d
       </mesh>
       <mesh position={[0, 2, -depth / 2 + 0.04]}>
         <boxGeometry args={[width, 0.035, 0.07]} />
-        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.55} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.12} />
       </mesh>
     </group>
   );
@@ -599,15 +605,15 @@ function CentralCommandHub({ accent, secondary }: { accent: string; secondary: s
   return (
     <group position={[0, 0, 0]}>
       <mesh position={[0, 0.2, 0]} castShadow>
-        <cylinderGeometry args={[2.3, 2.5, 0.3, 8]} />
+        <cylinderGeometry args={[2.3, 2.5, 0.3, 64]} />
         <meshPhysicalMaterial color="#F8FAFC" metalness={0.08} roughness={0.26} clearcoat={0.55} clearcoatRoughness={0.2} />
       </mesh>
       <mesh position={[0, 0.37, 0]}>
-        <cylinderGeometry args={[1.8, 1.8, 0.045, 8]} />
+        <cylinderGeometry args={[1.8, 1.8, 0.035, 64]} />
         <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={0.45} />
       </mesh>
       <mesh position={[0, 0.57, 0]}>
-        <cylinderGeometry args={[1.15, 1.15, 0.17, 8]} />
+        <cylinderGeometry args={[1.15, 1.15, 0.17, 64]} />
         <meshPhysicalMaterial color="#C7D0DA" metalness={0.22} roughness={0.32} clearcoat={0.35} />
       </mesh>
       <mesh position={[0, 0.72, 0]}>
@@ -877,6 +883,77 @@ function AgentAvatar({
   const wearsGlasses = agent.id === "tester" || agent.id === "researcher";
   const isPaused = agent.status === "paused";
 
+  // Rigged human GLBs are generated locally from CC0 MakeHuman data. If the
+  // founder has not generated the assets yet, keep the existing procedural avatar.
+  const [humanModel, setHumanModel] = useState<THREE.Group | null>(null);
+  const [humanAnimations, setHumanAnimations] = useState<THREE.AnimationClip[]>([]);
+  const humanActionRef = useRef<THREE.AnimationAction | null>(null);
+  const humanActionNameRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    let loadStarted = false;
+
+    void fetch("/models/agents/manifest.json", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((manifest: { enabled?: boolean; agents?: string[] } | null) => {
+        if (!mounted || !manifest?.enabled || !manifest.agents?.includes(agent.id)) return;
+        loadStarted = true;
+        const loader = new GLTFLoader();
+        loader.load(
+          `/models/agents/${agent.id}.glb`,
+          (gltf) => {
+            if (!mounted) return;
+            gltf.scene.traverse((node) => {
+              const mesh = node as THREE.Mesh;
+              if (mesh.isMesh) {
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+              }
+            });
+            setHumanAnimations(gltf.animations);
+            setHumanModel(gltf.scene);
+          },
+          undefined,
+          () => {
+            if (mounted) {
+              setHumanAnimations([]);
+              setHumanModel(null);
+            }
+          },
+        );
+      })
+      .catch(() => {
+        if (mounted) {
+          setHumanAnimations([]);
+          setHumanModel(null);
+        }
+      });
+
+    return () => {
+      mounted = false;
+      if (loadStarted) {
+        humanActionRef.current?.stop();
+        humanActionRef.current = null;
+        humanActionNameRef.current = null;
+      }
+    };
+  }, [agent.id]);
+
+  const humanMixer = useMemo(
+    () => (humanModel ? new THREE.AnimationMixer(humanModel) : null),
+    [humanModel],
+  );
+
+  useEffect(() => {
+    humanActionRef.current = null;
+    humanActionNameRef.current = null;
+    return () => {
+      humanMixer?.stopAllAction();
+      if (humanModel) humanMixer?.uncacheRoot(humanModel);
+    };
+  }, [humanMixer, humanModel]);
+
   useFrame(({ clock }, delta) => {
     const time = clock.elapsedTime;
     const breathing = Math.sin(time * 1.65 + bobOffset) * 0.012;
@@ -909,6 +986,30 @@ function AgentAvatar({
       agent.location === "discussion" || agent.location === "meeting";
     const wantsToSit = !walking && destinationIsSeat &&
       agent.status !== "paused" && agent.status !== "failed";
+
+    // Real rig animation is driven by the same runtime destination and status.
+    if (humanMixer && humanModel) {
+      const wantedClip = walking
+        ? /^walk$/i
+        : wantsToSit
+          ? /sit.?idle/i
+          : agent.status === "collaborating"
+            ? /^talk$/i
+            : /^idle$/i;
+      const nextClip = humanAnimations.find((clip) => wantedClip.test(clip.name))
+        ?? humanAnimations.find((clip) => /^idle$/i.test(clip.name));
+      if (nextClip && humanActionNameRef.current !== nextClip.name) {
+        const nextAction = humanMixer.clipAction(nextClip);
+        nextAction.reset();
+        nextAction.setEffectiveWeight(1);
+        nextAction.fadeIn(0.28).play();
+        humanActionRef.current?.fadeOut(0.28);
+        humanActionRef.current = nextAction;
+        humanActionNameRef.current = nextClip.name;
+      }
+      humanMixer.update(delta);
+    }
+
     sitPoseRef.current = THREE.MathUtils.damp(
       sitPoseRef.current, wantsToSit ? 1 : 0, 5.5, delta
     );
@@ -957,12 +1058,14 @@ function AgentAvatar({
         registerAvatar(node);
       }}
     >
-      <mesh ref={haloRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.075, 0]}>
-        <torusGeometry args={[selected ? 0.72 : 0.56, selected ? 0.038 : 0.022, 10, 56]} />
-        <meshBasicMaterial color={agent.color} transparent opacity={selected ? 0.78 : 0.28} />
+      <mesh ref={haloRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.045, 0]}>
+        <torusGeometry args={[selected ? 0.7 : 0.53, selected ? 0.026 : 0.014, 12, 72]} />
+        <meshBasicMaterial color={agent.color} transparent opacity={selected ? 0.52 : 0.09} />
       </mesh>
 
-      <group ref={torsoRef} position={[0, 1.02, 0]}>
+      {humanModel ? <primitive object={humanModel} /> : null}
+
+      <group ref={torsoRef} visible={!humanModel} position={[0, 1.02, 0]}>
         <mesh castShadow receiveShadow>
           <capsuleGeometry args={[0.285, 0.43, 8, 18]} />
           <meshPhysicalMaterial color={agent.color} roughness={0.78} metalness={0.015} clearcoat={0.08} />
@@ -987,7 +1090,7 @@ function AgentAvatar({
         ) : null}
       </group>
 
-      <group ref={headRef} position={[0, 1.73, 0]}>
+      <group ref={headRef} visible={!humanModel} position={[0, 1.73, 0]}>
         <mesh castShadow>
           <sphereGeometry args={[0.235, 32, 28]} />
           <meshPhysicalMaterial color={skinTone} roughness={0.86} metalness={0} sheen={0.16} sheenRoughness={0.75} />
@@ -1051,6 +1154,7 @@ function AgentAvatar({
       {[-0.13, 0.13].map((side, index) => (
         <group
           key={side}
+          visible={!humanModel}
           ref={index === 0 ? leftLegRef : rightLegRef}
           position={[side, 0.72, 0.05]}
         >
@@ -1069,7 +1173,7 @@ function AgentAvatar({
         </group>
       ))}
 
-      <group ref={leftArmRef} position={[-0.32, 1.27, 0]}>
+      <group ref={leftArmRef} visible={!humanModel} position={[-0.32, 1.27, 0]}>
         <mesh castShadow position={[0, -0.17, 0]}>
           <capsuleGeometry args={[0.115, 0.32, 6, 12]} />
           <meshPhysicalMaterial color={agent.color} roughness={0.82} />
@@ -1083,7 +1187,7 @@ function AgentAvatar({
           <meshPhysicalMaterial color={skinTone} roughness={0.86} />
         </mesh>
       </group>
-      <group ref={rightArmRef} position={[0.32, 1.27, 0]}>
+      <group ref={rightArmRef} visible={!humanModel} position={[0.32, 1.27, 0]}>
         <mesh castShadow position={[0, -0.17, 0]}>
           <capsuleGeometry args={[0.115, 0.32, 6, 12]} />
           <meshPhysicalMaterial color={agent.color} roughness={0.82} />

@@ -686,3 +686,42 @@ html, body { background: #EEF2F6; color: #1D2939; }
 .mcp-role-chip { padding: 3px 6px; border-radius: 5px; color: #A66B35; background: rgba(214,154,53,.10); font-size: 7px; font-weight: 750; letter-spacing: .06em; }
 .mcp-role-chip.ready { color: #16845F; background: rgba(32,168,121,.10); }
 .mcp-status-error { display: block; margin-top: 8px; color: #B34D58 !important; }
+
+
+/* Premium architectural UI finish: calmer surfaces, stronger hierarchy and readable controls. */
+.world-topbar,
+.world-rail,
+.world-panel,
+.panel-reopen {
+  border-color: rgba(91, 108, 132, .18);
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 18px 54px rgba(31, 48, 70, .13);
+  backdrop-filter: blur(24px) saturate(1.18);
+}
+.world-topbar { height: 62px; border-radius: 16px; }
+.world-panel { width: 326px; border-radius: 17px; }
+.world-panel-head { padding: 18px 17px 15px; }
+.world-panel-head h2 { font-size: 19px; letter-spacing: -.035em; }
+.world-panel-subtitle { color: #62738A; font-size: 10px; line-height: 1.6; }
+.panel-content { padding: 15px 16px 18px; }
+.mission-card { padding: 13px; border-radius: 12px; background: rgba(255,255,255,.98); box-shadow: 0 6px 22px rgba(36,53,74,.06); }
+.mission-card h3 { font-size: 13px; line-height: 1.42; }
+.mission-card p, .panel-note, .timeline-event p { font-size: 10px; line-height: 1.6; }
+.mission-topline, .panel-section-label { font-size: 9px; }
+.specialist-copy strong { font-size: 10px; }
+.specialist-copy small { font-size: 9px; }
+.world-intro { width: min(300px, 28vw); }
+.world-intro h1 { font-size: clamp(24px, 2.25vw, 35px); line-height: 1.02; }
+.world-intro-copy { max-width: 260px; font-size: 10px; }
+.world-intro-stats { gap: 15px; }
+.room-chip { min-height: 39px; border-radius: 11px; background: rgba(255,255,255,.94); box-shadow: 0 8px 22px rgba(31,48,70,.09); }
+.room-chip small { font-size: 9px; }
+.world-footer { font-size: 7px; color: #66768B; }
+.footer-shortcuts kbd { border-radius: 5px; background: rgba(255,255,255,.9); }
+.world-location { border-radius: 10px; background: rgba(248,250,252,.96); }
+@media (max-width: 1120px) {
+  .world-panel { width: 300px; }
+}
+@media (max-width: 800px) {
+  .world-panel { width: auto; }
+}
