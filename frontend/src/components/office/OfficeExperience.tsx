@@ -415,6 +415,7 @@ export function OfficeExperience() {
             focusedRoom={focusedRoom}
             followSelectedAgent={followSelectedAgent}
             focusRequest={agentFocusRequest}
+            onFallbackTo2D={() => setShowMap(true)}
           />
         )}
       </div>

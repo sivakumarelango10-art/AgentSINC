@@ -1,6 +1,56 @@
 {
-  "version": 1,
-  "enabled": false,
-  "source": "Ara 3D Gen / MakeHuman CC0 assets",
-  "agents": []
+    "version":  1,
+    "enabled":  true,
+    "source":  "Ara 3D Gen / MakeHuman CC0 assets",
+    "detail":  "high",
+    "animations":  [
+                       "idle",
+                       "walk",
+                       "run",
+                       "talk",
+                       "sit_down",
+                       "sit_idle",
+                       "stand_up"
+                   ],
+    "agents":  [
+                   "ceo",
+                   "team_lead",
+                   "developer",
+                   "designer",
+                   "researcher",
+                   "tester"
+               ],
+    "generatedAt":  "2026-11-18T06:22:30.0034987Z",
+    "models":  {
+                   "tester":  {
+                                  "file":  "tester.glb",
+                                  "seed":  9106,
+                                  "bytes":  12795580
+                              },
+                   "designer":  {
+                                    "file":  "designer.glb",
+                                    "seed":  9104,
+                                    "bytes":  13114040
+                                },
+                   "developer":  {
+                                     "file":  "developer.glb",
+                                     "seed":  9103,
+                                     "bytes":  12686100
+                                 },
+                   "team_lead":  {
+                                     "file":  "team_lead.glb",
+                                     "seed":  9102,
+                                     "bytes":  12141680
+                                 },
+                   "researcher":  {
+                                      "file":  "researcher.glb",
+                                      "seed":  9105,
+                                      "bytes":  11333192
+                                  },
+                   "ceo":  {
+                               "file":  "ceo.glb",
+                               "seed":  9101,
+                               "bytes":  19599396
+                           }
+               }
 }
